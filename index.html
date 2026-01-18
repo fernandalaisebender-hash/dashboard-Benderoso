@@ -27,6 +27,19 @@
             gap: 15px;
         }
 
+        /* Área de Log de Erros (Diagnóstico) */
+        #debug-log {
+            background: #ffeaa7;
+            color: #d35400;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            margin-bottom: 10px;
+            border: 1px solid #fdcb6e;
+            display: none; /* Só aparece se tiver mensagem */
+        }
+
         .filter-group {
             display: flex;
             align-items: center;
@@ -65,37 +78,39 @@
 </head>
 <body>
 
+    <div id="debug-log"></div>
+
     <div class="header">
         <div>
             <h1 style="margin:0;">📊 Painel Financeiro</h1>
-            <small id="subtituloData">Carregando dados...</small>
+            <small id="subtituloData">Aguardando dados...</small>
         </div>
         
         <div class="filter-group">
-            <label>📅 Analisar Mês:</label>
+            <label>📅 Mês:</label>
             <select id="selMes" onchange="aplicarFiltro()">
-                <option value="todos">Todos os Períodos</option>
+                <option value="todos">Carregando...</option>
             </select>
-            <button class="btn-update" onclick="carregarDados()">🔄 Atualizar</button>
+            <button class="btn-update" onclick="carregarDados()">🔄 Recarregar</button>
         </div>
     </div>
 
     <div class="kpi-container">
         <div class="kpi-card">
-            <h3>Orçamento Planejado</h3>
-            <p id="kpiOrcado">...</p>
+            <h3>Orçamento</h3>
+            <p id="kpiOrcado">-</p>
         </div>
         <div class="kpi-card">
-            <h3>Total Gasto (Realizado)</h3>
-            <p id="kpiRealizado">...</p>
+            <h3>Realizado</h3>
+            <p id="kpiRealizado">-</p>
         </div>
         <div class="kpi-card">
-            <h3>Saldo do Período</h3>
-            <p id="kpiSaldo">...</p>
+            <h3>Saldo</h3>
+            <p id="kpiSaldo">-</p>
         </div>
         <div class="kpi-card">
             <h3>Status</h3>
-            <p id="kpiStatus">...</p>
+            <p id="kpiStatus">-</p>
         </div>
     </div>
 
@@ -109,7 +124,7 @@
     </div>
 
     <div class="table-container">
-        <h3>Lançamentos do Período (Base: Valor Ajustado)</h3>
+        <h3>Lançamentos (Valor Ajustado)</h3>
         <table id="tabelaDados" class="display" style="width:100%">
             <thead>
                 <tr>
@@ -118,7 +133,7 @@
                     <th>Sub-Categoria</th>
                     <th>Tipo</th>
                     <th>Origem</th>
-                    <th>Valor Ajustado</th>
+                    <th>Valor</th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -135,19 +150,37 @@
 
         window.onload = carregarDados;
 
+        function logDebug(msg) {
+            console.log(msg);
+            let el = document.getElementById('debug-log');
+            el.style.display = 'block';
+            el.innerHTML += ">> " + msg + "<br>";
+        }
+
+        // Função robusta para limpar valores
         function limparValor(valorStr) {
             if (!valorStr) return 0;
             if (typeof valorStr === 'number') return valorStr;
+            // Remove R$, espaços e converte , para .
             let limpo = valorStr.replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
+            // Remove caracteres invisíveis que o Excel às vezes coloca
+            limpo = limpo.replace(/[^0-9.-]/g, '');
             return parseFloat(limpo) || 0;
         }
 
+        // Função robusta para extrair mês
         function extrairMesAno(dataStr) {
             if (!dataStr) return "";
-            let partes = dataStr.split('/');
-            if (partes.length === 3) {
-                return partes[2] + "-" + partes[1]; 
+            
+            // Tenta formato DD/MM/YYYY
+            if (dataStr.includes('/')) {
+                let partes = dataStr.split('/');
+                if (partes.length >= 3) {
+                    // partes[2] = Ano, partes[1] = Mês
+                    return partes[2].trim() + "-" + partes[1].trim(); 
+                }
             }
+            // Tenta formato YYYY-MM-DD (padrão Google Sheets às vezes)
             let dataObj = new Date(dataStr);
             if (!isNaN(dataObj)) {
                 let mes = (dataObj.getMonth() + 1).toString().padStart(2, '0');
@@ -157,26 +190,56 @@
         }
 
         function formatarMesAnoLegivel(chaveAnoMes) {
-            if (!chaveAnoMes) return "Data Inválida";
-            let [ano, mes] = chaveAnoMes.split('-');
+            if (!chaveAnoMes) return "-";
+            let partes = chaveAnoMes.split('-');
+            if(partes.length < 2) return chaveAnoMes;
+            
+            let ano = partes[0];
+            let mes = parseInt(partes[1]);
             const nomes = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-            return `${nomes[parseInt(mes)]} de ${ano}`;
+            return `${nomes[mes]} de ${ano}`;
         }
 
         function carregarDados() {
+            logDebug("Iniciando download da planilha...");
+            
             Papa.parse(LINK_PLANILHA, {
                 download: true,
                 header: true,
                 skipEmptyLines: true,
                 complete: function(results) {
-                    if(results.data.length === 0) return;
+                    logDebug("Download concluído. Linhas recebidas: " + results.data.length);
+                    
+                    if(results.data.length === 0) {
+                        logDebug("ERRO CRÍTICO: Planilha veio vazia. Verifique o link.");
+                        return;
+                    }
+
+                    // Verifica se as colunas existem (imprime a primeira linha para checar headers)
+                    let colunasRecebidas = Object.keys(results.data[0]);
+                    logDebug("Colunas encontradas: " + colunasRecebidas.join(", "));
+
+                    // Verifica colunas essenciais
+                    let temData = colunasRecebidas.some(c => c.toLowerCase().trim() === 'data');
+                    let temValorAjustado = colunasRecebidas.some(c => c.toLowerCase().includes('ajustado'));
+
+                    if (!temData) logDebug("ALERTA: Coluna 'Data' não encontrada. Verifique o CSV.");
+                    if (!temValorAjustado) logDebug("ALERTA: Coluna 'Valor ajustado' não encontrada. Tentaremos 'Valor'.");
+
                     DADOS_GLOBAIS = results.data;
-                    popularFiltroMeses();
-                    aplicarFiltro();
+                    try {
+                        popularFiltroMeses();
+                        aplicarFiltro();
+                        logDebug("Dashboard atualizado com sucesso!");
+                        // Esconde o log se tudo correu bem após 3 segundos
+                        setTimeout(() => { document.getElementById('debug-log').style.display = 'none'; }, 5000);
+                    } catch (e) {
+                        logDebug("ERRO JS: " + e.message);
+                    }
                 },
                 error: function(err) {
-                    console.error(err);
-                    alert("Erro ao carregar dados.");
+                    logDebug("ERRO DE CONEXÃO: " + err.name + " - " + err.message);
+                    logDebug("DICA: Se estás a abrir o arquivo direto do PC (file://), o navegador bloqueou. Usa o GitHub Pages ou um servidor local.");
                 }
             });
         }
@@ -184,13 +247,15 @@
         function popularFiltroMeses() {
             let mesesUnicos = new Set();
             DADOS_GLOBAIS.forEach(row => {
-                let chave = extrairMesAno(row['Data']);
-                if (chave && chave.length > 4) mesesUnicos.add(chave);
+                // Tenta achar a coluna de Data independente de maiúsculas/minúsculas
+                let colData = Object.keys(row).find(k => k.toLowerCase().trim() === 'data');
+                if(colData) {
+                    let chave = extrairMesAno(row[colData]);
+                    if (chave && chave.length > 4) mesesUnicos.add(chave);
+                }
             });
             
-            // Ordena os meses do mais recente para o mais antigo
             let arrayMeses = Array.from(mesesUnicos).sort().reverse();
-            
             let select = document.getElementById("selMes");
             select.innerHTML = '<option value="todos">Todos os Períodos</option>';
             
@@ -201,17 +266,15 @@
                 select.appendChild(option);
             });
 
-            // --- LÓGICA DO MÊS ATUAL ---
+            // Lógica do Mês Atual
             let dataHoje = new Date();
-            let mesAtual = (dataHoje.getMonth() + 1).toString().padStart(2, '0'); // ex: "01"
-            let anoAtual = dataHoje.getFullYear(); // ex: 2026
-            let chaveAtual = `${anoAtual}-${mesAtual}`; // ex: "2026-01"
+            let mesAtual = (dataHoje.getMonth() + 1).toString().padStart(2, '0');
+            let anoAtual = dataHoje.getFullYear();
+            let chaveAtual = `${anoAtual}-${mesAtual}`;
 
-            // Tenta selecionar o mês atual se ele existir na lista
             if (arrayMeses.includes(chaveAtual)) {
                 select.value = chaveAtual;
             } else if (arrayMeses.length > 0) {
-                // Se não achar o atual (ex: virou o mês e não tem dado ainda), pega o mais recente da lista
                 select.value = arrayMeses[0];
             }
         }
@@ -222,12 +285,13 @@
 
             if (filtro === "todos") {
                 dadosFiltrados = DADOS_GLOBAIS;
-                document.getElementById("subtituloData").innerText = "Visualizando todo o histórico";
+                document.getElementById("subtituloData").innerText = "Todo o Histórico";
             } else {
                 dadosFiltrados = DADOS_GLOBAIS.filter(row => {
-                    return extrairMesAno(row['Data']) === filtro;
+                    let colData = Object.keys(row).find(k => k.toLowerCase().trim() === 'data');
+                    return colData && extrairMesAno(row[colData]) === filtro;
                 });
-                document.getElementById("subtituloData").innerText = "Visualizando: " + formatarMesAnoLegivel(filtro);
+                document.getElementById("subtituloData").innerText = formatarMesAnoLegivel(filtro);
             }
 
             processarEExibir(dadosFiltrados);
@@ -240,32 +304,46 @@
             let tabelaLinhas = [];
 
             dados.forEach(row => {
-                let categoria = row['Categoria'];
-                let subCategoria = row['Sub-Categoria'];
-                let tipo = row['Tipo']; 
-                let origem = row['o que']; 
-                let data = row['Data'];
-                let valorStr = row['Valor ajustado'] || row['Valor']; 
+                // Busca de colunas inteligente (Case Insensitive)
+                let keys = Object.keys(row);
+                let kCategoria = keys.find(k => k.toLowerCase().trim() === 'categoria');
+                let kSubCat = keys.find(k => k.toLowerCase().trim() === 'sub-categoria') || keys.find(k => k.toLowerCase().trim() === 'subcategoria');
+                let kTipo = keys.find(k => k.toLowerCase().trim() === 'tipo');
+                let kOrigem = keys.find(k => k.toLowerCase().trim() === 'o que') || keys.find(k => k.toLowerCase().trim() === 'origem');
+                let kData = keys.find(k => k.toLowerCase().trim() === 'data');
+                
+                // Prioriza Valor Ajustado, se não tiver, pega Valor
+                let kValorAjustado = keys.find(k => k.toLowerCase().includes('ajustado'));
+                let kValor = keys.find(k => k.toLowerCase().trim() === 'valor');
+                
+                if (!kCategoria || !kOrigem || !row[kCategoria]) return;
 
-                if (!categoria || !origem) return;
+                let categoria = row[kCategoria];
+                let subCategoria = kSubCat ? row[kSubCat] : '-';
+                let tipo = row[kTipo] || '';
+                let origem = row[kOrigem];
+                let data = row[kData];
 
-                let valor = limparValor(valorStr); 
+                let valorRaw = (kValorAjustado && row[kValorAjustado]) ? row[kValorAjustado] : row[kValor];
+                let valor = limparValor(valorRaw); 
+                
                 let origemNorm = origem.toLowerCase().trim();
-                let tipoNorm = tipo ? tipo.toLowerCase().trim() : "";
+                let tipoNorm = tipo.toLowerCase().trim();
 
                 if (!categorias[categoria]) categorias[categoria] = { orcado: 0, realizado: 0 };
 
+                // Lógica de Soma (usando Math.abs para gráficos positivos)
                 if (origemNorm.includes('orçamento')) {
                     if (tipoNorm === 'despesa') {
-                        let valorAbsoluto = Math.abs(valor);
-                        categorias[categoria].orcado += valorAbsoluto;
-                        totalOrcado += valorAbsoluto;
+                        let val = Math.abs(valor);
+                        categorias[categoria].orcado += val;
+                        totalOrcado += val;
                     }
                 } else if (origemNorm.includes('realizado')) {
                     if (tipoNorm === 'despesa') {
-                        let valorAbsoluto = Math.abs(valor);
-                        categorias[categoria].realizado += valorAbsoluto;
-                        totalRealizado += valorAbsoluto;
+                        let val = Math.abs(valor);
+                        categorias[categoria].realizado += val;
+                        totalRealizado += val;
                     }
                 }
 
@@ -320,7 +398,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { title: { display: true, text: 'Orçado vs Realizado (Por Categoria)' } }
+                    plugins: { title: { display: true, text: 'Orçado vs Realizado' } }
                 }
             });
 
