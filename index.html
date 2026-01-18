@@ -27,18 +27,16 @@
             gap: 15px;
         }
 
-        /* Área de Log de Erros (Diagnóstico) */
-        #debug-log {
-            background: #ffeaa7;
-            color: #d35400;
-            padding: 10px;
+        /* Caixa de Alerta para Diagnóstico */
+        #status-msg {
+            padding: 15px;
+            margin-bottom: 20px;
             border-radius: 5px;
-            font-family: monospace;
-            font-size: 12px;
-            margin-bottom: 10px;
-            border: 1px solid #fdcb6e;
-            display: none; /* Só aparece se tiver mensagem */
+            font-weight: bold;
+            display: none;
         }
+        .status-erro { background-color: #ffeaa7; color: #d35400; border: 1px solid #fdcb6e; }
+        .status-ok { background-color: #55efc4; color: #00b894; border: 1px solid #00b894; display: none !important;}
 
         .filter-group {
             display: flex;
@@ -49,18 +47,8 @@
             border-radius: 6px;
         }
         
-        select {
-            padding: 8px;
-            border-radius: 4px;
-            border: none;
-            font-size: 16px;
-            cursor: pointer;
-            background-color: #fff;
-            color: #333;
-            font-weight: bold;
-        }
-
-        .btn-update { background-color: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; }
+        select { padding: 8px; border-radius: 4px; border: none; font-size: 16px; font-weight: bold; }
+        .btn-update { background-color: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; }
         .btn-update:hover { background-color: #219150; }
 
         .kpi-container { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
@@ -70,20 +58,23 @@
         
         .charts-container { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
         .chart-box { flex: 1; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); min-width: 400px; height: 400px; }
-        .table-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .table-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px;}
         
         .positivo { color: #27ae60 !important; }
         .negativo { color: #c0392b !important; }
+        
+        /* Área de Debug Raw */
+        .debug-area { background: #dfe6e9; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 11px; color: #2d3436; }
     </style>
 </head>
 <body>
 
-    <div id="debug-log"></div>
+    <div id="status-msg" class="status-erro"></div>
 
     <div class="header">
         <div>
             <h1 style="margin:0;">📊 Painel Financeiro</h1>
-            <small id="subtituloData">Aguardando dados...</small>
+            <small id="subtituloData">A carregar...</small>
         </div>
         
         <div class="filter-group">
@@ -124,7 +115,7 @@
     </div>
 
     <div class="table-container">
-        <h3>Lançamentos (Valor Ajustado)</h3>
+        <h3>Lançamentos</h3>
         <table id="tabelaDados" class="display" style="width:100%">
             <thead>
                 <tr>
@@ -133,11 +124,16 @@
                     <th>Sub-Categoria</th>
                     <th>Tipo</th>
                     <th>Origem</th>
-                    <th>Valor</th>
+                    <th>Valor Final</th>
                 </tr>
             </thead>
             <tbody></tbody>
         </table>
+    </div>
+
+    <div class="debug-area">
+        <strong>Diagnóstico de Dados (Primeiras 3 linhas recebidas):</strong>
+        <pre id="debug-content">A aguardar dados...</pre>
     </div>
 
     <script>
@@ -150,37 +146,34 @@
 
         window.onload = carregarDados;
 
-        function logDebug(msg) {
-            console.log(msg);
-            let el = document.getElementById('debug-log');
+        function mostrarErro(msg) {
+            let el = document.getElementById('status-msg');
+            el.className = 'status-erro';
             el.style.display = 'block';
-            el.innerHTML += ">> " + msg + "<br>";
+            el.innerHTML = "⚠️ " + msg;
         }
 
-        // Função robusta para limpar valores
+        function mostrarSucesso() {
+            let el = document.getElementById('status-msg');
+            el.style.display = 'none';
+        }
+
         function limparValor(valorStr) {
             if (!valorStr) return 0;
             if (typeof valorStr === 'number') return valorStr;
-            // Remove R$, espaços e converte , para .
-            let limpo = valorStr.replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
-            // Remove caracteres invisíveis que o Excel às vezes coloca
-            limpo = limpo.replace(/[^0-9.-]/g, '');
+            // Remove caracteres estranhos, mantém apenas números, vírgula, ponto e sinal de menos
+            let limpo = valorStr.toString().replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
+            // Garante que hífen normal seja usado para negativo
+            limpo = limpo.replace("−", "-"); 
             return parseFloat(limpo) || 0;
         }
 
-        // Função robusta para extrair mês
         function extrairMesAno(dataStr) {
             if (!dataStr) return "";
-            
-            // Tenta formato DD/MM/YYYY
             if (dataStr.includes('/')) {
                 let partes = dataStr.split('/');
-                if (partes.length >= 3) {
-                    // partes[2] = Ano, partes[1] = Mês
-                    return partes[2].trim() + "-" + partes[1].trim(); 
-                }
+                if (partes.length >= 3) return partes[2].trim() + "-" + partes[1].trim(); 
             }
-            // Tenta formato YYYY-MM-DD (padrão Google Sheets às vezes)
             let dataObj = new Date(dataStr);
             if (!isNaN(dataObj)) {
                 let mes = (dataObj.getMonth() + 1).toString().padStart(2, '0');
@@ -193,53 +186,33 @@
             if (!chaveAnoMes) return "-";
             let partes = chaveAnoMes.split('-');
             if(partes.length < 2) return chaveAnoMes;
-            
-            let ano = partes[0];
-            let mes = parseInt(partes[1]);
             const nomes = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-            return `${nomes[mes]} de ${ano}`;
+            return `${nomes[parseInt(partes[1])]} de ${partes[0]}`;
         }
 
         function carregarDados() {
-            logDebug("Iniciando download da planilha...");
+            mostrarErro("A conectar à planilha...");
             
             Papa.parse(LINK_PLANILHA, {
                 download: true,
                 header: true,
                 skipEmptyLines: true,
                 complete: function(results) {
-                    logDebug("Download concluído. Linhas recebidas: " + results.data.length);
-                    
                     if(results.data.length === 0) {
-                        logDebug("ERRO CRÍTICO: Planilha veio vazia. Verifique o link.");
+                        mostrarErro("Conexão feita, mas a planilha veio vazia.");
                         return;
                     }
-
-                    // Verifica se as colunas existem (imprime a primeira linha para checar headers)
-                    let colunasRecebidas = Object.keys(results.data[0]);
-                    logDebug("Colunas encontradas: " + colunasRecebidas.join(", "));
-
-                    // Verifica colunas essenciais
-                    let temData = colunasRecebidas.some(c => c.toLowerCase().trim() === 'data');
-                    let temValorAjustado = colunasRecebidas.some(c => c.toLowerCase().includes('ajustado'));
-
-                    if (!temData) logDebug("ALERTA: Coluna 'Data' não encontrada. Verifique o CSV.");
-                    if (!temValorAjustado) logDebug("ALERTA: Coluna 'Valor ajustado' não encontrada. Tentaremos 'Valor'.");
-
+                    
+                    // Mostra as primeiras linhas no rodapé para diagnóstico
+                    document.getElementById('debug-content').innerText = JSON.stringify(results.data.slice(0, 3), null, 2);
+                    
                     DADOS_GLOBAIS = results.data;
-                    try {
-                        popularFiltroMeses();
-                        aplicarFiltro();
-                        logDebug("Dashboard atualizado com sucesso!");
-                        // Esconde o log se tudo correu bem após 3 segundos
-                        setTimeout(() => { document.getElementById('debug-log').style.display = 'none'; }, 5000);
-                    } catch (e) {
-                        logDebug("ERRO JS: " + e.message);
-                    }
+                    popularFiltroMeses();
+                    aplicarFiltro();
+                    mostrarSucesso();
                 },
                 error: function(err) {
-                    logDebug("ERRO DE CONEXÃO: " + err.name + " - " + err.message);
-                    logDebug("DICA: Se estás a abrir o arquivo direto do PC (file://), o navegador bloqueou. Usa o GitHub Pages ou um servidor local.");
+                    mostrarErro("Erro de Conexão: " + err.message + ". <br>Se estiveres no PC, o navegador pode ter bloqueado. Tenta no GitHub.");
                 }
             });
         }
@@ -247,11 +220,11 @@
         function popularFiltroMeses() {
             let mesesUnicos = new Set();
             DADOS_GLOBAIS.forEach(row => {
-                // Tenta achar a coluna de Data independente de maiúsculas/minúsculas
+                // Procura coluna Data ignorando maiúsculas
                 let colData = Object.keys(row).find(k => k.toLowerCase().trim() === 'data');
-                if(colData) {
+                if(colData && row[colData]) {
                     let chave = extrairMesAno(row[colData]);
-                    if (chave && chave.length > 4) mesesUnicos.add(chave);
+                    if (chave.length > 4) mesesUnicos.add(chave);
                 }
             });
             
@@ -266,32 +239,25 @@
                 select.appendChild(option);
             });
 
-            // Lógica do Mês Atual
-            let dataHoje = new Date();
-            let mesAtual = (dataHoje.getMonth() + 1).toString().padStart(2, '0');
-            let anoAtual = dataHoje.getFullYear();
-            let chaveAtual = `${anoAtual}-${mesAtual}`;
-
-            if (arrayMeses.includes(chaveAtual)) {
-                select.value = chaveAtual;
-            } else if (arrayMeses.length > 0) {
-                select.value = arrayMeses[0];
-            }
+            // Seleciona mês atual se existir
+            let hoje = new Date();
+            let chaveAtual = hoje.getFullYear() + "-" + (hoje.getMonth()+1).toString().padStart(2,'0');
+            if(arrayMeses.includes(chaveAtual)) select.value = chaveAtual;
+            else if(arrayMeses.length > 0) select.value = arrayMeses[0];
         }
 
         function aplicarFiltro() {
             let filtro = document.getElementById("selMes").value;
-            let dadosFiltrados;
+            let dadosFiltrados = DADOS_GLOBAIS;
 
-            if (filtro === "todos") {
-                dadosFiltrados = DADOS_GLOBAIS;
-                document.getElementById("subtituloData").innerText = "Todo o Histórico";
-            } else {
+            if (filtro !== "todos") {
                 dadosFiltrados = DADOS_GLOBAIS.filter(row => {
                     let colData = Object.keys(row).find(k => k.toLowerCase().trim() === 'data');
                     return colData && extrairMesAno(row[colData]) === filtro;
                 });
                 document.getElementById("subtituloData").innerText = formatarMesAnoLegivel(filtro);
+            } else {
+                document.getElementById("subtituloData").innerText = "Todo o Histórico";
             }
 
             processarEExibir(dadosFiltrados);
@@ -304,52 +270,61 @@
             let tabelaLinhas = [];
 
             dados.forEach(row => {
-                // Busca de colunas inteligente (Case Insensitive)
+                // 1. Detectar nomes das colunas (Robustez)
                 let keys = Object.keys(row);
                 let kCategoria = keys.find(k => k.toLowerCase().trim() === 'categoria');
-                let kSubCat = keys.find(k => k.toLowerCase().trim() === 'sub-categoria') || keys.find(k => k.toLowerCase().trim() === 'subcategoria');
+                let kSubCat = keys.find(k => k.toLowerCase().includes('sub'));
                 let kTipo = keys.find(k => k.toLowerCase().trim() === 'tipo');
-                let kOrigem = keys.find(k => k.toLowerCase().trim() === 'o que') || keys.find(k => k.toLowerCase().trim() === 'origem');
+                let kOrigem = keys.find(k => k.toLowerCase().includes('o que')) || keys.find(k => k.toLowerCase().includes('origem'));
                 let kData = keys.find(k => k.toLowerCase().trim() === 'data');
                 
-                // Prioriza Valor Ajustado, se não tiver, pega Valor
+                // Estratégia Híbrida de Valor:
                 let kValorAjustado = keys.find(k => k.toLowerCase().includes('ajustado'));
-                let kValor = keys.find(k => k.toLowerCase().trim() === 'valor');
+                let kValorBruto = keys.find(k => k.toLowerCase().trim() === 'valor');
                 
                 if (!kCategoria || !kOrigem || !row[kCategoria]) return;
 
-                let categoria = row[kCategoria];
-                let subCategoria = kSubCat ? row[kSubCat] : '-';
-                let tipo = row[kTipo] || '';
-                let origem = row[kOrigem];
-                let data = row[kData];
-
-                let valorRaw = (kValorAjustado && row[kValorAjustado]) ? row[kValorAjustado] : row[kValor];
-                let valor = limparValor(valorRaw); 
+                let tipo = row[kTipo] ? row[kTipo].toLowerCase().trim() : "";
+                let origem = row[kOrigem].toLowerCase().trim();
                 
-                let origemNorm = origem.toLowerCase().trim();
-                let tipoNorm = tipo.toLowerCase().trim();
+                // LÓGICA DE OURO: Tenta Valor Ajustado. Se falhar, calcula na hora.
+                let valorFinal = 0;
+                let valorRaw = (kValorAjustado) ? row[kValorAjustado] : "";
+                
+                if (valorRaw && valorRaw !== "") {
+                    // Temos valor ajustado (já vem negativo)
+                    valorFinal = limparValor(valorRaw);
+                } else if (kValorBruto) {
+                    // Não temos ajustado, calculamos manualmente
+                    let bruto = limparValor(row[kValorBruto]);
+                    if (tipo === 'despesa') valorFinal = bruto * -1;
+                    else valorFinal = bruto;
+                }
 
+                if (valorFinal === 0 && row[kValorBruto] === "") return; // Pula linhas vazias
+
+                // Agregação
+                let categoria = row[kCategoria];
                 if (!categorias[categoria]) categorias[categoria] = { orcado: 0, realizado: 0 };
 
-                // Lógica de Soma (usando Math.abs para gráficos positivos)
-                if (origemNorm.includes('orçamento')) {
-                    if (tipoNorm === 'despesa') {
-                        let val = Math.abs(valor);
-                        categorias[categoria].orcado += val;
-                        totalOrcado += val;
+                // Usamos Math.abs para gráficos (mostrar volume positivo)
+                let valorAbs = Math.abs(valorFinal);
+
+                if (origem.includes('orçamento')) {
+                    if (tipo === 'despesa') {
+                        categorias[categoria].orcado += valorAbs;
+                        totalOrcado += valorAbs;
                     }
-                } else if (origemNorm.includes('realizado')) {
-                    if (tipoNorm === 'despesa') {
-                        let val = Math.abs(valor);
-                        categorias[categoria].realizado += val;
-                        totalRealizado += val;
+                } else if (origem.includes('realizado')) {
+                    if (tipo === 'despesa') {
+                        categorias[categoria].realizado += valorAbs;
+                        totalRealizado += valorAbs;
                     }
                 }
 
                 tabelaLinhas.push([
-                    data, categoria, subCategoria, tipo, origem, 
-                    valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                    row[kData], categoria, row[kSubCat]||'-', row[kTipo], row[kOrigem], 
+                    valorFinal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
                 ]);
             });
 
@@ -373,7 +348,7 @@
                 elStatus.className = 'positivo';
             } else {
                 elSaldo.className = 'negativo';
-                elStatus.innerText = "Estourou o Orçamento";
+                elStatus.innerText = "Estourou";
                 elStatus.className = 'negativo';
             }
         }
@@ -398,7 +373,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { title: { display: true, text: 'Orçado vs Realizado' } }
+                    plugins: { title: { display: true, text: 'Comparativo Orçado vs Realizado' } }
                 }
             });
 
@@ -427,7 +402,7 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: { 
-                        title: { display: true, text: 'Distribuição dos Gastos' },
+                        title: { display: true, text: 'Para onde foi o dinheiro' },
                         legend: { position: 'right' }
                     }
                 }
