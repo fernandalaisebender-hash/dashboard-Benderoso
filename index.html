@@ -27,7 +27,6 @@
             gap: 15px;
         }
 
-        /* Área de Filtros */
         .filter-group {
             display: flex;
             align-items: center;
@@ -110,7 +109,7 @@
     </div>
 
     <div class="table-container">
-        <h3>Lançamentos do Período</h3>
+        <h3>Lançamentos do Período (Base: Valor Ajustado)</h3>
         <table id="tabelaDados" class="display" style="width:100%">
             <thead>
                 <tr>
@@ -119,7 +118,7 @@
                     <th>Sub-Categoria</th>
                     <th>Tipo</th>
                     <th>Origem</th>
-                    <th>Valor</th>
+                    <th>Valor Ajustado</th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -132,29 +131,25 @@
 
         let chartComparativoInstancia = null;
         let chartCategoriasInstancia = null;
-        
-        // Variável global para guardar todos os dados antes de filtrar
         let DADOS_GLOBAIS = [];
 
         window.onload = carregarDados;
 
+        // Função ajustada para ler valores com sinal negativo (ex: -R$ 50,00)
         function limparValor(valorStr) {
             if (!valorStr) return 0;
             if (typeof valorStr === 'number') return valorStr;
+            // Remove R$ e pontos de milhar, mantém vírgula e sinal de menos
             let limpo = valorStr.replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
             return parseFloat(limpo) || 0;
         }
 
-        // Função auxiliar para pegar "Janeiro/2026" de uma data "17/01/2026"
         function extrairMesAno(dataStr) {
             if (!dataStr) return "";
-            // Tenta formato DD/MM/YYYY ou YYYY-MM-DD
             let partes = dataStr.split('/');
             if (partes.length === 3) {
-                // assume DD/MM/YYYY -> retorna YYYY-MM
                 return partes[2] + "-" + partes[1]; 
             }
-            // Se vier do google sheets script como Date object string
             let dataObj = new Date(dataStr);
             if (!isNaN(dataObj)) {
                 let mes = (dataObj.getMonth() + 1).toString().padStart(2, '0');
@@ -177,10 +172,9 @@
                 skipEmptyLines: true,
                 complete: function(results) {
                     if(results.data.length === 0) return;
-                    
                     DADOS_GLOBAIS = results.data;
                     popularFiltroMeses();
-                    aplicarFiltro(); // Aplica o filtro inicial
+                    aplicarFiltro();
                 },
                 error: function(err) {
                     console.error(err);
@@ -191,30 +185,20 @@
 
         function popularFiltroMeses() {
             let mesesUnicos = new Set();
-            
             DADOS_GLOBAIS.forEach(row => {
                 let chave = extrairMesAno(row['Data']);
                 if (chave && chave.length > 4) mesesUnicos.add(chave);
             });
-
-            // Converter para array e ordenar (mais recente primeiro)
             let arrayMeses = Array.from(mesesUnicos).sort().reverse();
-
             let select = document.getElementById("selMes");
-            // Limpa opções antigas mantendo o "Todos"
             select.innerHTML = '<option value="todos">Todos os Períodos</option>';
-
             arrayMeses.forEach(mesChave => {
                 let option = document.createElement("option");
                 option.value = mesChave;
                 option.text = formatarMesAnoLegivel(mesChave);
                 select.appendChild(option);
             });
-
-            // Seleciona o primeiro mês (mais atual) automaticamente se houver
-            if (arrayMeses.length > 0) {
-                select.value = arrayMeses[0];
-            }
+            if (arrayMeses.length > 0) select.value = arrayMeses[0];
         }
 
         function aplicarFiltro() {
@@ -244,29 +228,38 @@
                 let categoria = row['Categoria'];
                 let subCategoria = row['Sub-Categoria'];
                 let tipo = row['Tipo']; 
-                let valorStr = row['Valor']; 
                 let origem = row['o que']; 
                 let data = row['Data'];
+                
+                // MUDANÇA PRINCIPAL: Lendo a coluna 'Valor ajustado'
+                // Se não achar (undefined), tenta 'Valor', mas prioriza o ajustado
+                let valorStr = row['Valor ajustado'] || row['Valor']; 
 
                 if (!categoria || !origem) return;
 
-                let valor = limparValor(valorStr);
+                let valor = limparValor(valorStr); // Aqui o valor pode vir negativo (-50.00)
                 let origemNorm = origem.toLowerCase().trim();
                 let tipoNorm = tipo ? tipo.toLowerCase().trim() : "";
 
                 // Inicializa objeto categoria
                 if (!categorias[categoria]) categorias[categoria] = { orcado: 0, realizado: 0 };
 
-                // Regra de Soma
+                // --- LÓGICA DE SOMA COM VALOR AJUSTADO ---
+                // Usamos Math.abs(valor) para somar nos KPIs e Gráficos, 
+                // pois queremos ver o "Volume de Gasto" e não subtrair do gráfico.
+
                 if (origemNorm.includes('orçamento')) {
                     if (tipoNorm === 'despesa') {
-                        categorias[categoria].orcado += valor;
-                        totalOrcado += valor;
+                        // Se for despesa, soma o valor absoluto (transforma -50 em 50 para o gráfico)
+                        let valorAbsoluto = Math.abs(valor);
+                        categorias[categoria].orcado += valorAbsoluto;
+                        totalOrcado += valorAbsoluto;
                     }
                 } else if (origemNorm.includes('realizado')) {
                     if (tipoNorm === 'despesa') {
-                        categorias[categoria].realizado += valor;
-                        totalRealizado += valor;
+                        let valorAbsoluto = Math.abs(valor);
+                        categorias[categoria].realizado += valorAbsoluto;
+                        totalRealizado += valorAbsoluto;
                     }
                 }
 
@@ -285,18 +278,21 @@
             document.getElementById('kpiOrcado').innerText = orcado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             document.getElementById('kpiRealizado').innerText = realizado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             
+            // Saldo = O que planejei gastar (Orcado) - O que gastei de verdade (Realizado)
+            // Como transformamos tudo em positivo acima, a subtração funciona direto.
             let saldo = orcado - realizado;
+            
             let elSaldo = document.getElementById('kpiSaldo');
             elSaldo.innerText = saldo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             
             let elStatus = document.getElementById('kpiStatus');
             if (saldo >= 0) {
                 elSaldo.className = 'positivo';
-                elStatus.innerText = "No Azul (+)";
+                elStatus.innerText = "Dentro da Meta";
                 elStatus.className = 'positivo';
             } else {
                 elSaldo.className = 'negativo';
-                elStatus.innerText = "No Vermelho (-)";
+                elStatus.innerText = "Estourou o Orçamento";
                 elStatus.className = 'negativo';
             }
         }
@@ -328,7 +324,7 @@
             const ctx2 = document.getElementById('chartCategorias').getContext('2d');
             if (chartCategoriasInstancia) chartCategoriasInstancia.destroy();
 
-            // Filtrar apenas categorias que tiveram gasto > 0 para a rosca não ficar poluída
+            // Filtrar para rosca
             let labelsRosca = [];
             let dadosRosca = [];
             labels.forEach((label, index) => {
