@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Financeiro 3.0</title>
+    <title>Dashboard Financeiro 4.0 (BI Interativo)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
@@ -15,32 +15,44 @@
         body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; color: #333; }
         
         .header { 
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); 
+            background: linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%); 
             color: white; 
-            padding: 25px; 
+            padding: 20px 30px; 
             border-radius: 12px; 
             margin-bottom: 25px; 
             display: flex; 
             justify-content: space-between; 
             align-items: center; 
-            flex-wrap: wrap;
-            gap: 15px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
 
+        .controls-area { display: flex; gap: 15px; align-items: center; }
+
         .filter-group {
+            background: rgba(255,255,255,0.2);
+            padding: 5px 15px;
+            border-radius: 8px;
             display: flex;
             align-items: center;
             gap: 10px;
-            background: rgba(255,255,255,0.2);
-            padding: 8px 15px;
-            border-radius: 8px;
         }
         
-        select { padding: 8px; border-radius: 6px; border: none; font-size: 15px; font-weight: bold; color: #1e3c72; outline: none;}
-        .btn-update { background-color: #00b894; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        .btn-update:hover { background-color: #00cec9; transform: translateY(-2px); }
+        select { padding: 8px; border-radius: 6px; border: none; font-size: 15px; font-weight: bold; color: #2c3e50; outline: none;}
+        
+        .btn-reset { 
+            background-color: #e74c3c; 
+            color: white; 
+            border: none; 
+            padding: 8px 15px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            display: none; /* Escondido por padrão */
+            animation: fadeIn 0.3s;
+        }
 
+        .btn-update { background-color: #00b894; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        
         /* KPIs */
         .kpi-container { display: flex; gap: 20px; margin-bottom: 25px; flex-wrap: wrap; }
         .kpi-card { 
@@ -50,120 +62,115 @@
             border-radius: 12px; 
             box-shadow: 0 2px 10px rgba(0,0,0,0.05); 
             text-align: center; 
-            min-width: 200px; 
-            border-left: 5px solid #bdc3c7;
+            min-width: 180px; 
+            border-top: 4px solid #bdc3c7;
         }
-        .kpi-card h3 { margin: 0 0 5px 0; color: #7f8c8d; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
-        .kpi-card p { font-size: 26px; font-weight: 800; margin: 0; color: #2c3e50; }
-        .kpi-card small { font-size: 12px; color: #95a5a6; }
-
-        .kpi-blue { border-left-color: #3498db; }
-        .kpi-green { border-left-color: #27ae60; }
-        .kpi-red { border-left-color: #c0392b; }
-        .kpi-gold { border-left-color: #f1c40f; }
-
-        /* Gráficos e Tabelas */
-        .section-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; border-left: 4px solid #2c3e50; padding-left: 10px; color: #2c3e50; }
-        .grid-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 25px; margin-bottom: 30px; }
-        .chart-box { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); height: 350px; }
+        .kpi-card h3 { margin: 0 0 5px 0; color: #7f8c8d; font-size: 12px; text-transform: uppercase; }
+        .kpi-card p { font-size: 24px; font-weight: 800; margin: 0; color: #2c3e50; }
         
+        .kpi-blue { border-top-color: #3498db; }
+        .kpi-green { border-top-color: #27ae60; }
+        .kpi-red { border-top-color: #c0392b; }
+        .kpi-gold { border-top-color: #f1c40f; }
+
+        /* Gráficos */
+        .section-title { font-size: 18px; font-weight: bold; margin: 30px 0 15px 0; border-left: 5px solid #2c3e50; padding-left: 10px; color: #2c3e50; }
+        .grid-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 25px; margin-bottom: 30px; }
+        .chart-box { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); height: 400px; position: relative; }
+        .chart-hint { position: absolute; top: 10px; right: 15px; font-size: 11px; color: #95a5a6; font-style: italic; }
+
+        /* Tabela */
         .table-container { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .badge-o { background: #f1c40f; color: #333; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; }
+        .badge-r { background: #27ae60; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; }
 
-        .positivo { color: #27ae60 !important; }
-        .negativo { color: #c0392b !important; }
-
-        /* Loading Overlay */
-        #loading { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.9); z-index:9999; display:flex; justify-content:center; align-items:center; flex-direction:column; }
+        /* Loading */
+        #loading { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.95); z-index:9999; display:flex; justify-content:center; align-items:center; flex-direction:column; }
         .spinner { width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom:15px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body>
 
     <div id="loading">
         <div class="spinner"></div>
-        <h2>Carregando seus dados...</h2>
+        <h3 style="color:#2c3e50">Carregando Dashboard...</h3>
     </div>
 
     <div class="header">
         <div>
-            <h1 style="margin:0;">📊 Painel Financeiro</h1>
-            <small id="subtituloData">Visão Geral</small>
+            <h1 style="margin:0; font-size: 24px;">📊 Dashboard Interativo</h1>
+            <small id="subtituloData" style="opacity: 0.9;">Visão Geral</small>
         </div>
         
-        <div class="filter-group">
-            <label>📅 Período:</label>
-            <select id="selMes" onchange="aplicarFiltro()">
-                <option value="todos">Todos os Dados</option>
-            </select>
-            <button class="btn-update" onclick="location.reload()">🔄 Atualizar</button>
+        <div class="controls-area">
+            <button id="btnLimpar" class="btn-reset" onclick="limparFiltrosInterativos()">❌ Limpar Filtros</button>
+            
+            <div class="filter-group">
+                <label>📅 Mês:</label>
+                <select id="selMes" onchange="mudarMes()"></select>
+            </div>
+            
+            <button class="btn-update" onclick="location.reload()">🔄</button>
         </div>
     </div>
 
-    <div class="section-title">💰 Análise de Caixa (Realizado)</div>
     <div class="kpi-container">
         <div class="kpi-card kpi-blue">
-            <h3>Receitas (Entradas)</h3>
-            <p id="kpiReceitaReal">R$ 0,00</p>
-            <small>Dinheiro que entrou na conta</small>
+            <h3>Entradas (R)</h3>
+            <p id="kpiReceita">R$ 0,00</p>
         </div>
         <div class="kpi-card kpi-red">
-            <h3>Despesas (Saídas)</h3>
-            <p id="kpiDespesaReal">R$ 0,00</p>
-            <small>Dinheiro que saiu da conta</small>
+            <h3>Saídas (R)</h3>
+            <p id="kpiDespesa">R$ 0,00</p>
         </div>
         <div class="kpi-card kpi-green">
-            <h3>Saldo em Caixa</h3>
-            <p id="kpiSaldoCaixa">R$ 0,00</p>
-            <small>Receitas - Despesas</small>
+            <h3>Saldo Caixa</h3>
+            <p id="kpiSaldo">R$ 0,00</p>
         </div>
-    </div>
-
-    <div class="grid-charts">
-        <div class="chart-box">
-            <canvas id="chartFluxoCaixa"></canvas>
-        </div>
-        <div class="chart-box">
-            <canvas id="chartReceitaVsDespesa"></canvas>
-        </div>
-    </div>
-
-    <div class="section-title">📉 Variação do Orçamento (Planejado vs Real)</div>
-    <div class="kpi-container">
         <div class="kpi-card kpi-gold">
-            <h3>Despesa Orçada</h3>
-            <p id="kpiDespesaOrc">R$ 0,00</p>
-            <small>Limite definido</small>
-        </div>
-        <div class="kpi-card kpi-red">
-            <h3>Despesa Realizada</h3>
-            <p id="kpiDespesaReal2">R$ 0,00</p>
-            <small>Gasto efetivo</small>
+            <h3>Orçado (O)</h3>
+            <p id="kpiOrcado">R$ 0,00</p>
         </div>
         <div class="kpi-card">
             <h3>Variação</h3>
             <p id="kpiVariacao">R$ 0,00</p>
-            <small id="kpiVariacaoText">Diferença</small>
         </div>
     </div>
 
     <div class="grid-charts">
-        <div class="chart-box" style="grid-column: span 2;">
-            <canvas id="chartOrcadoVsRealizado"></canvas>
+        <div class="chart-box">
+            <span class="chart-hint">👆 Clique na barra para filtrar</span>
+            <canvas id="chartCategorias"></canvas>
+        </div>
+        <div class="chart-box">
+            <span class="chart-hint">👆 Clique na fatia para filtrar</span>
+            <canvas id="chartPagamentos"></canvas>
+        </div>
+    </div>
+
+    <div class="grid-charts" style="grid-template-columns: 1fr 1fr;">
+        <div class="chart-box" style="height: 300px;">
+            <canvas id="chartFluxo"></canvas>
+        </div>
+        <div class="chart-box" style="height: 300px;">
+             <canvas id="chartReceitaDespesa"></canvas>
         </div>
     </div>
 
     <div class="table-container">
-        <div class="section-title">📝 Detalhes dos Lançamentos</div>
+        <div class="section-title" style="margin-top:0">📝 Detalhes dos Lançamentos</div>
         <table id="tabelaDados" class="display" style="width:100%">
             <thead>
                 <tr>
                     <th>Data</th>
+                    <th>St</th>
                     <th>Tipo</th>
                     <th>Categoria</th>
                     <th>Sub-Categoria</th>
+                    <th>Descrição</th> <th>Pgto</th>
                     <th>Valor</th>
-                    <th>Status</th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -171,264 +178,316 @@
     </div>
 
     <script>
-        // LINK DA SUA PLANILHA
+        // --- CONFIGURAÇÃO ---
         const LINK_PLANILHA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR_QrNqrn4TJZyIRm8HClxhYEU_vipX5qC_wF5sYmgbfnKPn5gl5HwNUB8SBnK_eI0U8_jiIrb7vTHE/pub?gid=1365210633&single=true&output=csv";
 
-        let DADOS_GLOBAIS = [];
-        let chartFluxoCaixa = null;
-        let chartReceitaVsDespesa = null;
-        let chartOrcadoVsRealizado = null;
+        // Variáveis Globais de Estado
+        let DADOS_BRUTOS = [];
+        let DADOS_MES_ATUAL = []; // Dados filtrados pelo mês
+        let FILTRO_INTERATIVO = { categoria: null, pagamento: null }; // Filtros de clique
+        
+        // Instâncias dos Gráficos
+        let chartCats = null, chartPgtos = null, chartFluxo = null, chartRecDesp = null;
 
         window.onload = carregarDados;
 
-        // --- FUNÇÕES AUXILIARES ---
-        function limparValor(valorStr) {
-            if (!valorStr) return 0;
-            if (typeof valorStr === 'number') return valorStr;
-            let limpo = valorStr.toString().replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
-            limpo = limpo.replace(/[^0-9.-]/g, ''); // Remove caracteres invisíveis
-            return parseFloat(limpo) || 0;
-        }
-
-        function extrairMesAno(dataStr) {
-            if (!dataStr) return "";
-            if (dataStr.includes('/')) {
-                let partes = dataStr.split('/');
-                if (partes.length >= 3) return partes[2].trim() + "-" + partes[1].trim(); 
-            }
-            let dataObj = new Date(dataStr);
-            if (!isNaN(dataObj)) {
-                let mes = (dataObj.getMonth() + 1).toString().padStart(2, '0');
-                return dataObj.getFullYear() + "-" + mes;
-            }
-            return "";
-        }
-
-        function formatarMoeda(val) {
-            return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        }
-
-        function formatarDataLegivel(chave) {
-            if(!chave) return "";
-            let [ano, mes] = chave.split('-');
-            const nomes = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-            return `${nomes[parseInt(mes)]} de ${ano}`;
-        }
-
-        // --- CARREGAMENTO ---
+        // --- MANIPULAÇÃO DE DADOS ---
         function carregarDados() {
             Papa.parse(LINK_PLANILHA, {
-                download: true,
-                header: true,
-                skipEmptyLines: true,
-                complete: function(results) {
-                    DADOS_GLOBAIS = results.data;
+                download: true, header: true, skipEmptyLines: true,
+                complete: function(res) {
+                    DADOS_BRUTOS = res.data;
                     document.getElementById('loading').style.display = 'none';
-                    if(DADOS_GLOBAIS.length === 0) { alert("Planilha vazia!"); return; }
-                    
-                    popularFiltroMeses();
-                    aplicarFiltro();
-                },
-                error: function(err) {
-                    alert("Erro ao carregar: " + err.message);
+                    inicializarFiltroMeses();
+                    mudarMes(); // Carrega o primeiro mês
                 }
             });
         }
 
-        function popularFiltroMeses() {
+        function limparValor(val) {
+            if(!val) return 0;
+            if(typeof val === 'number') return val;
+            let v = val.replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
+            v = v.replace(/[^0-9.-]/g, '');
+            return parseFloat(v) || 0;
+        }
+
+        function extrairMes(dataStr) {
+            if(!dataStr) return "";
+            if(dataStr.includes('/')) {
+                let p = dataStr.split('/');
+                if(p.length >= 3) return p[2].trim() + "-" + p[1].trim();
+            }
+            let d = new Date(dataStr);
+            if(!isNaN(d)) return d.getFullYear() + "-" + (d.getMonth()+1).toString().padStart(2,'0');
+            return "";
+        }
+
+        // --- FILTROS ---
+        function inicializarFiltroMeses() {
             let meses = new Set();
-            DADOS_GLOBAIS.forEach(row => {
-                let kData = Object.keys(row).find(k => k.toLowerCase().trim() === 'data');
-                if(kData && row[kData]) {
-                    let chave = extrairMesAno(row[kData]);
-                    if(chave.length > 4) meses.add(chave);
+            DADOS_BRUTOS.forEach(r => {
+                let kData = Object.keys(r).find(k=>k.toLowerCase().trim()==='data');
+                if(kData && r[kData]) {
+                    let m = extrairMes(r[kData]);
+                    if(m.length > 4) meses.add(m);
                 }
             });
             let sorted = Array.from(meses).sort().reverse();
             let sel = document.getElementById("selMes");
+            
+            // Adiciona opção "Todos"
+            let optAll = document.createElement("option"); optAll.value = "todos"; optAll.text = "Todos os Períodos";
+            sel.appendChild(optAll);
+
             sorted.forEach(m => {
                 let opt = document.createElement("option");
+                let [ano, mes] = m.split('-');
+                let nomes = ["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
                 opt.value = m;
-                opt.text = formatarDataLegivel(m);
+                opt.text = `${nomes[parseInt(mes)]}/${ano}`;
                 sel.appendChild(opt);
             });
 
-            // Seleciona mês atual
+            // Tenta selecionar mês atual
             let hoje = new Date();
             let atual = hoje.getFullYear() + "-" + (hoje.getMonth()+1).toString().padStart(2,'0');
             if(sorted.includes(atual)) sel.value = atual;
             else if(sorted.length > 0) sel.value = sorted[0];
         }
 
-        function aplicarFiltro() {
-            let filtro = document.getElementById("selMes").value;
-            let dadosFiltrados = DADOS_GLOBAIS;
+        function mudarMes() {
+            // 1. Reseta filtros interativos ao mudar de mês
+            FILTRO_INTERATIVO = { categoria: null, pagamento: null };
+            document.getElementById('btnLimpar').style.display = 'none';
+
+            // 2. Filtra os dados brutos pelo mês selecionado
+            let mesSel = document.getElementById("selMes").value;
             
-            if(filtro !== "todos") {
-                dadosFiltrados = DADOS_GLOBAIS.filter(row => {
-                    let kData = Object.keys(row).find(k => k.toLowerCase().trim() === 'data');
-                    return kData && extrairMesAno(row[kData]) === filtro;
-                });
-                document.getElementById("subtituloData").innerText = formatarDataLegivel(filtro);
+            if(mesSel === 'todos') {
+                DADOS_MES_ATUAL = DADOS_BRUTOS;
+                document.getElementById('subtituloData').innerText = "Histórico Completo";
             } else {
-                document.getElementById("subtituloData").innerText = "Histórico Completo";
+                DADOS_MES_ATUAL = DADOS_BRUTOS.filter(r => {
+                    let kData = Object.keys(r).find(k=>k.toLowerCase().trim()==='data');
+                    return kData && extrairMes(r[kData]) === mesSel;
+                });
+                let txt = document.getElementById("selMes").options[document.getElementById("selMes").selectedIndex].text;
+                document.getElementById('subtituloData').innerText = "Visualizando: " + txt;
             }
-            
-            processarDados(dadosFiltrados);
+
+            atualizarDashboard();
         }
 
-        function processarDados(dados) {
-            let totalReceitaReal = 0;
-            let totalDespesaReal = 0;
-            let totalDespesaOrc = 0;
-            let categorias = {};
+        function filtrarInterativo(tipo, valor) {
+            // Define o filtro
+            if(tipo === 'categoria') FILTRO_INTERATIVO.categoria = valor;
+            if(tipo === 'pagamento') FILTRO_INTERATIVO.pagamento = valor;
+            
+            document.getElementById('btnLimpar').style.display = 'inline-block';
+            atualizarDashboard();
+        }
+
+        function limparFiltrosInterativos() {
+            FILTRO_INTERATIVO = { categoria: null, pagamento: null };
+            document.getElementById('btnLimpar').style.display = 'none';
+            atualizarDashboard();
+        }
+
+        // --- CORE: PROCESSAMENTO E RENDERIZAÇÃO ---
+        function atualizarDashboard() {
+            // Começa com os dados do mês
+            let dadosFinais = DADOS_MES_ATUAL;
+
+            // Aplica filtros interativos (BI)
+            if(FILTRO_INTERATIVO.categoria) {
+                dadosFinais = dadosFinais.filter(r => {
+                    let kCat = Object.keys(r).find(k=>k.toLowerCase().trim()==='categoria');
+                    return r[kCat] === FILTRO_INTERATIVO.categoria;
+                });
+            }
+            if(FILTRO_INTERATIVO.pagamento) {
+                dadosFinais = dadosFinais.filter(r => {
+                    let kPgto = Object.keys(r).find(k=>k.toLowerCase().includes('pagamento'));
+                    return r[kPgto] === FILTRO_INTERATIVO.pagamento;
+                });
+            }
+
+            processarMetricas(dadosFinais);
+        }
+
+        function processarMetricas(dados) {
+            let kpis = { rec:0, desp:0, orc:0 };
+            let catsData = {};
+            let pgtosData = {};
             let tabela = [];
 
-            dados.forEach(row => {
-                // Mapeamento de colunas
-                let keys = Object.keys(row);
-                let kData = keys.find(k => k.toLowerCase().trim() === 'data');
-                let kTipo = keys.find(k => k.toLowerCase().trim() === 'tipo');
-                let kCat = keys.find(k => k.toLowerCase().trim() === 'categoria');
-                let kSub = keys.find(k => k.toLowerCase().includes('sub'));
-                let kOrigem = keys.find(k => k.toLowerCase().includes('o que') || k.toLowerCase().includes('origem'));
-                
-                // Prioriza Valor Ajustado, senão Valor
-                let kValAdj = keys.find(k => k.toLowerCase().includes('ajustado'));
-                let kVal = keys.find(k => k.toLowerCase().trim() === 'valor');
+            dados.forEach(r => {
+                let keys = Object.keys(r);
+                let kData = keys.find(k=>k.toLowerCase().trim()==='data');
+                let kTipo = keys.find(k=>k.toLowerCase().trim()==='tipo');
+                let kCat  = keys.find(k=>k.toLowerCase().trim()==='categoria');
+                let kSub  = keys.find(k=>k.toLowerCase().includes('sub'));
+                let kDesc = keys.find(k=>k.toLowerCase().includes('descri')); // Descrição
+                let kOrig = keys.find(k=>k.toLowerCase().includes('o que') || k.toLowerCase().includes('origem'));
+                let kPgto = keys.find(k=>k.toLowerCase().includes('pagamento'));
+                let kValA = keys.find(k=>k.toLowerCase().includes('ajustado'));
+                let kVal  = keys.find(k=>k.toLowerCase().trim()==='valor');
 
-                if(!kData || !kTipo || !kCat) return;
+                if(!kData || !kTipo) return;
 
-                let tipo = (row[kTipo] || "").toLowerCase().trim();
-                let origem = (row[kOrigem] || "").toLowerCase().trim();
-                let cat = row[kCat];
+                let tipo = (r[kTipo]||"").toLowerCase().trim();
+                let origem = (r[kOrig]||"").toLowerCase().trim();
+                let cat = r[kCat] || "Outros";
+                let pgto = r[kPgto] || "Não inf.";
+                let desc = r[kDesc] || "-";
 
-                // Pega valor bruto
-                let valorBruto = 0;
-                if(kValAdj && row[kValAdj]) valorBruto = limparValor(row[kValAdj]);
-                else if(kVal && row[kVal]) valorBruto = limparValor(row[kVal]);
+                let vRaw = (kValA && r[kValA]) ? r[kValA] : (r[kVal]||"0");
+                let valor = Math.abs(limparValor(vRaw));
+                if(valor === 0) return;
 
-                // Transforma tudo em positivo (magnitude) para facilitar somas e gráficos
-                let valorAbs = Math.abs(valorBruto);
-                if(valorAbs === 0) return;
-
-                // Lógica de Somas e Categorias
-                if(!categorias[cat]) categorias[cat] = { orcado: 0, realizado: 0 };
-
+                // KPIs e Agregações
                 if(origem.includes('realizado')) {
-                    if(tipo === 'receita') totalReceitaReal += valorAbs;
-                    if(tipo === 'despesa') {
-                        totalDespesaReal += valorAbs;
-                        categorias[cat].realizado += valorAbs;
+                    if(tipo === 'receita') {
+                        kpis.rec += valor;
+                    } else if(tipo === 'despesa') {
+                        kpis.desp += valor;
+                        
+                        // Agrega Categoria (Realizado)
+                        if(!catsData[cat]) catsData[cat] = {real:0, orc:0};
+                        catsData[cat].real += valor;
+
+                        // Agrega Pagamento (Realizado)
+                        if(!pgtosData[pgto]) pgtosData[pgto] = 0;
+                        pgtosData[pgto] += valor;
                     }
                 } else if(origem.includes('orçamento')) {
                     if(tipo === 'despesa') {
-                        totalDespesaOrc += valorAbs;
-                        categorias[cat].orcado += valorAbs;
+                        kpis.orc += valor;
+                         if(!catsData[cat]) catsData[cat] = {real:0, orc:0};
+                        catsData[cat].orc += valor;
                     }
                 }
 
+                // Tabela
+                let statusBadge = origem.includes('orc') ? '<span class="badge-o">O</span>' : '<span class="badge-r">R</span>';
                 tabela.push([
-                    row[kData], 
-                    tipo.charAt(0).toUpperCase() + tipo.slice(1), 
-                    cat, 
-                    row[kSub] || '-', 
-                    formatarMoeda(valorAbs), 
-                    origem.includes('orc') ? 'Orçado' : 'Realizado'
+                    r[kData], statusBadge, tipo, cat, r[kSub]||"", desc, pgto, 
+                    valor.toLocaleString('pt-BR',{style:'currency', currency:'BRL'})
                 ]);
             });
 
-            atualizarKPIs(totalReceitaReal, totalDespesaReal, totalDespesaOrc);
-            atualizarGraficos(totalReceitaReal, totalDespesaReal, categorias);
-            atualizarTabela(tabela);
+            renderizarKPIs(kpis);
+            renderizarGraficos(catsData, pgtosData, kpis);
+            renderizarTabela(tabela);
         }
 
-        function atualizarKPIs(recReal, despReal, despOrc) {
-            // Caixa
-            document.getElementById('kpiReceitaReal').innerText = formatarMoeda(recReal);
-            document.getElementById('kpiDespesaReal').innerText = formatarMoeda(despReal);
+        // --- RENDERIZAÇÃO ---
+        function renderizarKPIs(k) {
+            document.getElementById('kpiReceita').innerText = k.rec.toLocaleString('pt-BR',{style:'currency', currency:'BRL'});
+            document.getElementById('kpiDespesa').innerText = k.desp.toLocaleString('pt-BR',{style:'currency', currency:'BRL'});
+            document.getElementById('kpiOrcado').innerText = k.orc.toLocaleString('pt-BR',{style:'currency', currency:'BRL'});
             
-            let saldoCaixa = recReal - despReal;
-            let elSaldo = document.getElementById('kpiSaldoCaixa');
-            elSaldo.innerText = formatarMoeda(saldoCaixa);
-            elSaldo.className = saldoCaixa >= 0 ? 'positivo' : 'negativo';
+            let saldo = k.rec - k.desp;
+            let elSaldo = document.getElementById('kpiSaldo');
+            elSaldo.innerText = saldo.toLocaleString('pt-BR',{style:'currency', currency:'BRL'});
+            elSaldo.style.color = saldo >= 0 ? '#27ae60' : '#c0392b';
 
-            // Orçamento
-            document.getElementById('kpiDespesaOrc').innerText = formatarMoeda(despOrc);
-            document.getElementById('kpiDespesaReal2').innerText = formatarMoeda(despReal);
-            
-            let variacao = despOrc - despReal;
+            let variacao = k.orc - k.desp;
             let elVar = document.getElementById('kpiVariacao');
-            elVar.innerText = formatarMoeda(variacao);
-            
-            let elVarTxt = document.getElementById('kpiVariacaoText');
-            if(variacao >= 0) {
-                elVar.className = 'positivo';
-                elVarTxt.innerText = "Economia (Sobrou)";
-            } else {
-                elVar.className = 'negativo';
-                elVarTxt.innerText = "Estouro (Faltou)";
-            }
+            elVar.innerText = variacao.toLocaleString('pt-BR',{style:'currency', currency:'BRL'});
+            elVar.style.color = variacao >= 0 ? '#27ae60' : '#c0392b';
         }
 
-        function atualizarGraficos(recReal, despReal, cats) {
-            // Gráfico 1: Receita vs Despesa (Caixa)
-            if(chartReceitaVsDespesa) chartReceitaVsDespesa.destroy();
-            chartReceitaVsDespesa = new Chart(document.getElementById('chartReceitaVsDespesa'), {
-                type: 'doughnut',
-                data: {
-                    labels: ['Receita (Entrou)', 'Despesa (Saiu)'],
-                    datasets: [{
-                        data: [recReal, despReal],
-                        backgroundColor: ['#27ae60', '#c0392b'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    plugins: { title: { display: true, text: 'Balanço de Caixa' } }
-                }
-            });
+        function renderizarGraficos(cats, pgtos, kpis) {
+            // 1. Categorias (Barra)
+            let labelsCat = Object.keys(cats);
+            let dReal = labelsCat.map(c => cats[c].real);
+            let dOrc = labelsCat.map(c => cats[c].orc);
 
-            // Gráfico 2: Fluxo (Barras)
-            if(chartFluxoCaixa) chartFluxoCaixa.destroy();
-            chartFluxoCaixa = new Chart(document.getElementById('chartFluxoCaixa'), {
+            if(chartCats) chartCats.destroy();
+            chartCats = new Chart(document.getElementById('chartCategorias'), {
                 type: 'bar',
                 data: {
-                    labels: ['Fluxo de Caixa'],
+                    labels: labelsCat,
                     datasets: [
-                        { label: 'Receitas', data: [recReal], backgroundColor: '#27ae60', borderRadius: 5 },
-                        { label: 'Despesas', data: [despReal], backgroundColor: '#c0392b', borderRadius: 5 }
-                    ]
-                },
-                options: {
-                    indexAxis: 'y',
-                    plugins: { title: { display: true, text: 'Comparativo Direto' } }
-                }
-            });
-
-            // Gráfico 3: Orçamento por Categoria
-            let labels = Object.keys(cats);
-            let dadosOrc = labels.map(c => cats[c].orcado);
-            let dadosReal = labels.map(c => cats[c].realizado);
-
-            if(chartOrcadoVsRealizado) chartOrcadoVsRealizado.destroy();
-            chartOrcadoVsRealizado = new Chart(document.getElementById('chartOrcadoVsRealizado'), {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        { label: 'Orçado', data: dadosOrc, backgroundColor: '#f1c40f' },
-                        { label: 'Realizado (Gasto)', data: dadosReal, backgroundColor: '#c0392b' }
+                        { label: 'Planejado', data: dOrc, backgroundColor: '#bdc3c7' },
+                        { label: 'Gasto Real', data: dReal, backgroundColor: '#c0392b' }
                     ]
                 },
                 options: {
                     responsive: true,
-                    plugins: { title: { display: true, text: 'Onde o dinheiro foi gasto vs Planejado' } }
+                    maintainAspectRatio: false,
+                    onClick: (e, els) => {
+                        if(els.length > 0) {
+                            let idx = els[0].index;
+                            filtrarInterativo('categoria', labelsCat[idx]);
+                        }
+                    },
+                    plugins: { title: { display: true, text: 'Orçado vs Realizado por Categoria (Interativo)' } }
                 }
+            });
+
+            // 2. Pagamentos (Novo!)
+            let labelsPgto = Object.keys(pgtos);
+            let dataPgto = Object.values(pgtos);
+
+            if(chartPgtos) chartPgtos.destroy();
+            chartPgtos = new Chart(document.getElementById('chartPagamentos'), {
+                type: 'doughnut',
+                data: {
+                    labels: labelsPgto,
+                    datasets: [{
+                        data: dataPgto,
+                        backgroundColor: ['#2ecc71', '#3498db', '#9b59b6', '#f1c40f', '#e67e22', '#e74c3c', '#34495e', '#1abc9c']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    onClick: (e, els) => {
+                        if(els.length > 0) {
+                            let idx = els[0].index;
+                            filtrarInterativo('pagamento', labelsPgto[idx]);
+                        }
+                    },
+                    plugins: { 
+                        title: { display: true, text: 'Formas de Pagamento (Interativo)' },
+                        legend: { position: 'right' }
+                    }
+                }
+            });
+
+            // 3. Gráficos Menores (Visuais)
+            if(chartFluxo) chartFluxo.destroy();
+            chartFluxo = new Chart(document.getElementById('chartFluxo'), {
+                type: 'bar',
+                data: {
+                    labels: ['Entradas', 'Saídas'],
+                    datasets: [{
+                        label: 'Total',
+                        data: [kpis.rec, kpis.desp],
+                        backgroundColor: ['#27ae60', '#c0392b']
+                    }]
+                },
+                options: { maintainAspectRatio: false, plugins: { legend: {display:false}, title: {display:true, text: 'Fluxo Caixa'} } }
+            });
+
+             if(chartRecDesp) chartRecDesp.destroy();
+            chartRecDesp = new Chart(document.getElementById('chartReceitaDespesa'), {
+                type: 'pie',
+                data: {
+                    labels: ['Receita', 'Despesa'],
+                    datasets: [{
+                        data: [kpis.rec, kpis.desp],
+                        backgroundColor: ['#27ae60', '#c0392b']
+                    }]
+                },
+                options: { maintainAspectRatio: false, plugins: { title: {display:true, text: 'Proporção'} } }
             });
         }
 
-        function atualizarTabela(rows) {
+        function renderizarTabela(rows) {
             if ($.fn.DataTable.isDataTable('#tabelaDados')) {
                 $('#tabelaDados').DataTable().destroy();
             }
@@ -436,7 +495,11 @@
                 data: rows,
                 language: { url: "//cdn.datatables.net/plug-ins/1.13.4/i18n/pt-BR.json" },
                 pageLength: 5,
-                order: [[0, 'desc']]
+                order: [[0, 'desc']],
+                columnDefs: [
+                    { width: "5%", targets: 1 }, // Largura pequena para o Status
+                    { width: "30%", targets: 5 } // Largura maior para Descrição
+                ]
             });
         }
     </script>
