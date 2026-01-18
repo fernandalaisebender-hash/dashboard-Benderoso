@@ -13,9 +13,41 @@
 
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; }
-        .header { background: #2c3e50; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
         
-        /* Botão de atualizar agora fica no topo, discreto */
+        .header { 
+            background: #2c3e50; 
+            color: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            margin-bottom: 20px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        /* Área de Filtros */
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255,255,255,0.1);
+            padding: 10px;
+            border-radius: 6px;
+        }
+        
+        select {
+            padding: 8px;
+            border-radius: 4px;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #fff;
+            color: #333;
+            font-weight: bold;
+        }
+
         .btn-update { background-color: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; }
         .btn-update:hover { background-color: #219150; }
 
@@ -37,22 +69,29 @@
     <div class="header">
         <div>
             <h1 style="margin:0;">📊 Painel Financeiro</h1>
-            <small>Dados conectados ao Google Drive</small>
+            <small id="subtituloData">Carregando dados...</small>
         </div>
-        <button class="btn-update" onclick="carregarDados()">🔄 Atualizar Dados</button>
+        
+        <div class="filter-group">
+            <label>📅 Analisar Mês:</label>
+            <select id="selMes" onchange="aplicarFiltro()">
+                <option value="todos">Todos os Períodos</option>
+            </select>
+            <button class="btn-update" onclick="carregarDados()">🔄 Atualizar</button>
+        </div>
     </div>
 
     <div class="kpi-container">
         <div class="kpi-card">
-            <h3>Total Orçado (Mês)</h3>
-            <p id="kpiOrcado">Carregando...</p>
+            <h3>Orçamento Planejado</h3>
+            <p id="kpiOrcado">...</p>
         </div>
         <div class="kpi-card">
             <h3>Total Gasto (Realizado)</h3>
-            <p id="kpiRealizado">Carregando...</p>
+            <p id="kpiRealizado">...</p>
         </div>
         <div class="kpi-card">
-            <h3>Saldo Restante</h3>
+            <h3>Saldo do Período</h3>
             <p id="kpiSaldo">...</p>
         </div>
         <div class="kpi-card">
@@ -71,7 +110,7 @@
     </div>
 
     <div class="table-container">
-        <h3>Detalhamento dos Lançamentos</h3>
+        <h3>Lançamentos do Período</h3>
         <table id="tabelaDados" class="display" style="width:100%">
             <thead>
                 <tr>
@@ -88,13 +127,15 @@
     </div>
 
     <script>
-        // SEU LINK JÁ ESTÁ CONFIGURADO AQUI:
+        // SEU LINK FIXO:
         const LINK_PLANILHA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR_QrNqrn4TJZyIRm8HClxhYEU_vipX5qC_wF5sYmgbfnKPn5gl5HwNUB8SBnK_eI0U8_jiIrb7vTHE/pub?gid=1365210633&single=true&output=csv";
 
         let chartComparativoInstancia = null;
         let chartCategoriasInstancia = null;
+        
+        // Variável global para guardar todos os dados antes de filtrar
+        let DADOS_GLOBAIS = [];
 
-        // Inicia o carregamento assim que a página abre
         window.onload = carregarDados;
 
         function limparValor(valorStr) {
@@ -104,73 +145,131 @@
             return parseFloat(limpo) || 0;
         }
 
+        // Função auxiliar para pegar "Janeiro/2026" de uma data "17/01/2026"
+        function extrairMesAno(dataStr) {
+            if (!dataStr) return "";
+            // Tenta formato DD/MM/YYYY ou YYYY-MM-DD
+            let partes = dataStr.split('/');
+            if (partes.length === 3) {
+                // assume DD/MM/YYYY -> retorna YYYY-MM
+                return partes[2] + "-" + partes[1]; 
+            }
+            // Se vier do google sheets script como Date object string
+            let dataObj = new Date(dataStr);
+            if (!isNaN(dataObj)) {
+                let mes = (dataObj.getMonth() + 1).toString().padStart(2, '0');
+                return dataObj.getFullYear() + "-" + mes;
+            }
+            return "";
+        }
+
+        function formatarMesAnoLegivel(chaveAnoMes) {
+            if (!chaveAnoMes) return "Data Inválida";
+            let [ano, mes] = chaveAnoMes.split('-');
+            const nomes = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+            return `${nomes[parseInt(mes)]} de ${ano}`;
+        }
+
         function carregarDados() {
-            console.log("Iniciando carregamento...");
-            
             Papa.parse(LINK_PLANILHA, {
                 download: true,
                 header: true,
                 skipEmptyLines: true,
                 complete: function(results) {
-                    console.log("Dados recebidos!", results.data);
-                    if(results.data.length === 0) {
-                        alert("A planilha parece estar vazia ou o link não retornou dados.");
-                        return;
-                    }
-                    processarDados(results.data);
+                    if(results.data.length === 0) return;
+                    
+                    DADOS_GLOBAIS = results.data;
+                    popularFiltroMeses();
+                    aplicarFiltro(); // Aplica o filtro inicial
                 },
                 error: function(err) {
                     console.error(err);
-                    alert("Erro ao carregar! Se você estiver abrindo o arquivo direto do PC (file://), o navegador pode ter bloqueado. Tente usar um servidor local ou hospedar no GitHub.");
+                    alert("Erro ao carregar dados.");
                 }
             });
         }
 
-        function processarDados(dados) {
+        function popularFiltroMeses() {
+            let mesesUnicos = new Set();
+            
+            DADOS_GLOBAIS.forEach(row => {
+                let chave = extrairMesAno(row['Data']);
+                if (chave && chave.length > 4) mesesUnicos.add(chave);
+            });
+
+            // Converter para array e ordenar (mais recente primeiro)
+            let arrayMeses = Array.from(mesesUnicos).sort().reverse();
+
+            let select = document.getElementById("selMes");
+            // Limpa opções antigas mantendo o "Todos"
+            select.innerHTML = '<option value="todos">Todos os Períodos</option>';
+
+            arrayMeses.forEach(mesChave => {
+                let option = document.createElement("option");
+                option.value = mesChave;
+                option.text = formatarMesAnoLegivel(mesChave);
+                select.appendChild(option);
+            });
+
+            // Seleciona o primeiro mês (mais atual) automaticamente se houver
+            if (arrayMeses.length > 0) {
+                select.value = arrayMeses[0];
+            }
+        }
+
+        function aplicarFiltro() {
+            let filtro = document.getElementById("selMes").value;
+            let dadosFiltrados;
+
+            if (filtro === "todos") {
+                dadosFiltrados = DADOS_GLOBAIS;
+                document.getElementById("subtituloData").innerText = "Visualizando todo o histórico";
+            } else {
+                dadosFiltrados = DADOS_GLOBAIS.filter(row => {
+                    return extrairMesAno(row['Data']) === filtro;
+                });
+                document.getElementById("subtituloData").innerText = "Visualizando: " + formatarMesAnoLegivel(filtro);
+            }
+
+            processarEExibir(dadosFiltrados);
+        }
+
+        function processarEExibir(dados) {
             let totalOrcado = 0;
             let totalRealizado = 0;
             let categorias = {}; 
             let tabelaLinhas = [];
 
             dados.forEach(row => {
-                // Mapeamento das colunas (baseado no seu CSV)
-                // Ajuste os nomes entre aspas se mudarem na planilha
                 let categoria = row['Categoria'];
                 let subCategoria = row['Sub-Categoria'];
                 let tipo = row['Tipo']; 
                 let valorStr = row['Valor']; 
-                // A coluna que define se é Orçamento ou Realizado:
                 let origem = row['o que']; 
                 let data = row['Data'];
 
                 if (!categoria || !origem) return;
 
                 let valor = limparValor(valorStr);
+                let origemNorm = origem.toLowerCase().trim();
+                let tipoNorm = tipo ? tipo.toLowerCase().trim() : "";
 
-                // --- LÓGICA DE SOMA ---
-                let origemNormalizada = origem.toLowerCase().trim();
-                let tipoNormalizado = tipo ? tipo.toLowerCase().trim() : "";
+                // Inicializa objeto categoria
+                if (!categorias[categoria]) categorias[categoria] = { orcado: 0, realizado: 0 };
 
-                // Orçamento
-                if (origemNormalizada.includes('orçamento')) {
-                    // Se for Despesa no orçamento, somamos ao total orçado
-                    if (tipoNormalizado === 'despesa') {
-                        if (!categorias[categoria]) categorias[categoria] = { orcado: 0, realizado: 0 };
+                // Regra de Soma
+                if (origemNorm.includes('orçamento')) {
+                    if (tipoNorm === 'despesa') {
                         categorias[categoria].orcado += valor;
                         totalOrcado += valor;
                     }
-                } 
-                // Realizado
-                else if (origemNormalizada.includes('realizado')) {
-                    // Se for Despesa realizada
-                    if (tipoNormalizado === 'despesa') {
-                        if (!categorias[categoria]) categorias[categoria] = { orcado: 0, realizado: 0 };
+                } else if (origemNorm.includes('realizado')) {
+                    if (tipoNorm === 'despesa') {
                         categorias[categoria].realizado += valor;
                         totalRealizado += valor;
                     }
                 }
 
-                // Preenche tabela
                 tabelaLinhas.push([
                     data, categoria, subCategoria, tipo, origem, 
                     valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -193,11 +292,11 @@
             let elStatus = document.getElementById('kpiStatus');
             if (saldo >= 0) {
                 elSaldo.className = 'positivo';
-                elStatus.innerText = "Dentro da Meta";
+                elStatus.innerText = "No Azul (+)";
                 elStatus.className = 'positivo';
             } else {
                 elSaldo.className = 'negativo';
-                elStatus.innerText = "Estourou o Orçamento";
+                elStatus.innerText = "No Vermelho (-)";
                 elStatus.className = 'negativo';
             }
         }
@@ -207,7 +306,6 @@
             const dadosOrcado = labels.map(cat => dadosCategorias[cat].orcado);
             const dadosRealizado = labels.map(cat => dadosCategorias[cat].realizado);
 
-            // Gráfico 1: Comparativo
             const ctx1 = document.getElementById('chartComparativo').getContext('2d');
             if (chartComparativoInstancia) chartComparativoInstancia.destroy();
             
@@ -216,32 +314,46 @@
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: 'Orçado', data: dadosOrcado, backgroundColor: '#95a5a6' },
-                        { label: 'Realizado', data: dadosRealizado, backgroundColor: '#c0392b' }
+                        { label: 'Orçado', data: dadosOrcado, backgroundColor: '#95a5a6', borderRadius: 4 },
+                        { label: 'Realizado', data: dadosRealizado, backgroundColor: '#c0392b', borderRadius: 4 }
                     ]
                 },
                 options: {
                     responsive: true,
-                    plugins: { title: { display: true, text: 'Orçado vs Realizado por Categoria' } }
+                    maintainAspectRatio: false,
+                    plugins: { title: { display: true, text: 'Orçado vs Realizado (Por Categoria)' } }
                 }
             });
 
-            // Gráfico 2: Rosca
             const ctx2 = document.getElementById('chartCategorias').getContext('2d');
             if (chartCategoriasInstancia) chartCategoriasInstancia.destroy();
+
+            // Filtrar apenas categorias que tiveram gasto > 0 para a rosca não ficar poluída
+            let labelsRosca = [];
+            let dadosRosca = [];
+            labels.forEach((label, index) => {
+                if (dadosRealizado[index] > 0) {
+                    labelsRosca.push(label);
+                    dadosRosca.push(dadosRealizado[index]);
+                }
+            });
 
             chartCategoriasInstancia = new Chart(ctx2, {
                 type: 'doughnut',
                 data: {
-                    labels: labels,
+                    labels: labelsRosca,
                     datasets: [{
-                        data: dadosRealizado,
+                        data: dadosRosca,
                         backgroundColor: ['#e74c3c', '#8e44ad', '#3498db', '#f1c40f', '#2ecc71', '#34495e', '#e67e22', '#16a085']
                     }]
                 },
                 options: {
                     responsive: true,
-                    plugins: { title: { display: true, text: 'Onde você gastou o dinheiro (Realizado)' } }
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        title: { display: true, text: 'Distribuição dos Gastos' },
+                        legend: { position: 'right' }
+                    }
                 }
             });
         }
@@ -254,7 +366,7 @@
                 data: dataset,
                 language: { url: "//cdn.datatables.net/plug-ins/1.13.4/i18n/pt-BR.json" },
                 pageLength: 10,
-                order: [[0, 'desc']] // Ordenar por data decrescente
+                order: [[0, 'desc']] 
             });
         }
     </script>
