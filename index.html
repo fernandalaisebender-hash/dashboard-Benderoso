@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Financeiro (V10.0 - BI Completo)</title>
+    <title>Dashboard Financeiro (V11.0 - Status O/R)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
@@ -19,7 +19,6 @@
         
         .controls { display: flex; gap: 10px; align-items: center; }
         
-        /* Badges de Filtro Ativo */
         .filter-badge { 
             background: #e74c3c; color: white; padding: 6px 14px; border-radius: 20px; 
             font-size: 12px; font-weight: bold; cursor: pointer; display: none; 
@@ -48,11 +47,14 @@
 
         .table-box { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
 
-        /* Badges de Tabela */
-        .diag-tag { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; color: #fff; text-transform: uppercase; }
-        .diag-orc { background-color: #f1c40f; color: #444; }
-        .diag-real-ok { background-color: #27ae60; }
-        .diag-real-bad { background-color: #e74c3c; }
+        /* Badges de Tabela OTIMIZADOS */
+        .status-badge { 
+            display: inline-flex; justify-content: center; align-items: center;
+            width: 24px; height: 24px; border-radius: 50%; 
+            font-size: 12px; font-weight: 900; color: white;
+        }
+        .status-o { background-color: #f1c40f; color: #555; box-shadow: 0 2px 4px rgba(241, 196, 15, 0.3); } /* Orçado - Amarelo */
+        .status-r { background-color: #2980b9; color: white; box-shadow: 0 2px 4px rgba(41, 128, 185, 0.3); } /* Realizado - Azul */
 
         #loading { position: fixed; inset: 0; background: rgba(255,255,255,0.95); z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         .spinner { width: 40px; height: 40px; border: 4px solid #ecf0f1; border-top: 4px solid var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 10px; }
@@ -63,12 +65,12 @@
 
     <div id="loading">
         <div class="spinner"></div>
-        <div style="font-weight:bold; color:var(--primary)">Carregando Dashboard...</div>
+        <div style="font-weight:bold; color:var(--primary)">Carregando...</div>
     </div>
 
     <div class="header">
         <div>
-            <h1 style="margin:0; font-size:22px;">Painel Financeiro Interativo</h1>
+            <h1 style="margin:0; font-size:22px;">Painel Financeiro</h1>
             <small id="subtitulo">Visão Geral</small>
         </div>
         <div class="controls">
@@ -83,30 +85,30 @@
 
     <div class="kpi-row">
         <div class="kpi-card border-blue">
-            <h3>Entradas (Receitas)</h3>
+            <h3>Entradas (R)</h3>
             <p id="kpiReceita">R$ 0,00</p>
         </div>
         <div class="kpi-card border-red">
-            <h3>Saídas (Despesas)</h3>
+            <h3>Saídas (R)</h3>
             <p id="kpiDespesa">R$ 0,00</p>
         </div>
         <div class="kpi-card border-green">
-            <h3>Saldo em Caixa</h3>
+            <h3>Saldo Real</h3>
             <p id="kpiSaldo">R$ 0,00</p>
         </div>
         <div class="kpi-card border-gold">
-            <h3>Orçamento (Planejado)</h3>
+            <h3>Orçamento (O)</h3>
             <p id="kpiOrcado">R$ 0,00</p>
         </div>
     </div>
 
     <div class="charts-grid">
         <div class="chart-box">
-            <div class="chart-title">Orçado vs Realizado por Categoria <span class="chart-hint">Clique para filtrar</span></div>
+            <div class="chart-title">Orçado vs Realizado (Clique para filtrar)</div>
             <canvas id="chartCategorias"></canvas>
         </div>
         <div class="chart-box">
-            <div class="chart-title">Formas de Pagamento (Realizado) <span class="chart-hint">Clique para filtrar</span></div>
+            <div class="chart-title">Formas de Pagamento (Realizado)</div>
             <canvas id="chartPagamentos"></canvas>
         </div>
     </div>
@@ -128,8 +130,7 @@
             <thead>
                 <tr>
                     <th>Data</th>
-                    <th>Status</th>
-                    <th>Tipo</th>
+                    <th>St</th> <th>Tipo</th>
                     <th>Categoria</th>
                     <th>Sub-Cat</th>
                     <th>Descrição</th>
@@ -143,14 +144,7 @@
     <script>
         const LINK_PLANILHA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR_QrNqrn4TJZyIRm8HClxhYEU_vipX5qC_wF5sYmgbfnKPn5gl5HwNUB8SBnK_eI0U8_jiIrb7vTHE/pub?gid=1365210633&single=true&output=csv";
 
-        // ESTADO GLOBAL DA APLICAÇÃO
-        let STATE = {
-            dadosBrutos: [],
-            dadosMes: [],
-            filtroCat: null,
-            filtroPgto: null,
-            charts: {} 
-        };
+        let STATE = { dadosBrutos: [], dadosMes: [], filtroCat: null, filtroPgto: null, charts: {} };
 
         window.onload = function() {
             Papa.parse(LINK_PLANILHA, {
@@ -164,7 +158,6 @@
             });
         };
 
-        // --- UTILITÁRIOS ---
         function cleanVal(v) {
             if(!v) return 0;
             if(typeof v === 'number') return v;
@@ -184,7 +177,6 @@
             return "";
         }
 
-        // --- FILTROS ---
         function configurarFiltroDatas() {
             let meses = new Set();
             STATE.dadosBrutos.forEach(r => {
@@ -216,11 +208,8 @@
         }
 
         function mudarMes() {
-            // Resetar filtros interativos ao mudar de mês
-            STATE.filtroCat = null;
-            STATE.filtroPgto = null;
+            STATE.filtroCat = null; STATE.filtroPgto = null;
             atualizarBadges();
-
             let val = document.getElementById("selMes").value;
             let txt = document.getElementById("selMes").options[document.getElementById("selMes").selectedIndex].text;
             document.getElementById("subtitulo").innerText = val === "todos" ? "Histórico Completo" : txt;
@@ -237,7 +226,6 @@
         function toggleFiltro(tipo, valor) {
             if(tipo === 'cat') STATE.filtroCat = (STATE.filtroCat === valor) ? null : valor;
             else if(tipo === 'pgto') STATE.filtroPgto = (STATE.filtroPgto === valor) ? null : valor;
-            
             atualizarBadges();
             processarDashboard();
         }
@@ -252,29 +240,24 @@
         function atualizarBadges() {
             let bCat = document.getElementById('badgeFiltroCat');
             let bPgto = document.getElementById('badgeFiltroPgto');
-            
             bCat.style.display = STATE.filtroCat ? 'flex' : 'none';
             if(STATE.filtroCat) bCat.querySelector('span').innerText = STATE.filtroCat;
-
             bPgto.style.display = STATE.filtroPgto ? 'flex' : 'none';
             if(STATE.filtroPgto) bPgto.querySelector('span').innerText = STATE.filtroPgto;
         }
 
-        // --- CORE: PROCESSAMENTO E RENDERIZAÇÃO ---
         function processarDashboard() {
-            // 1. Filtragem Interativa (BI)
+            // Filtragem
             let dadosFiltrados = STATE.dadosMes.filter(r => {
                 let keys = Object.keys(r);
                 let colCat = keys.find(k => k.toLowerCase().trim() === 'categoria');
                 let colPgto = keys.find(k => k.toLowerCase().includes('pagamento'));
-                
                 let matchCat = STATE.filtroCat ? (r[colCat] === STATE.filtroCat) : true;
                 let matchPgto = STATE.filtroPgto ? (r[colPgto] === STATE.filtroPgto) : true;
-
                 return matchCat && matchPgto;
             });
 
-            // 2. Agregação
+            // Agregação
             let kpis = { rec: 0, desp: 0, orc: 0 };
             let catStats = {};
             let pgtoStats = {};
@@ -282,32 +265,32 @@
 
             dadosFiltrados.forEach(r => {
                 let keys = Object.keys(r);
-                let kData = keys.find(k => k.toLowerCase().trim() === 'data');
-                let kTipo = keys.find(k => k.toLowerCase().trim() === 'tipo');
-                let kCat  = keys.find(k => k.toLowerCase().trim() === 'categoria');
-                let kSub  = keys.find(k => k.toLowerCase().includes('sub'));
-                let kOrig = keys.find(k => k.toLowerCase().includes('o que') || k.toLowerCase().includes('origem'));
-                let kValA = keys.find(k => k.toLowerCase().includes('ajustado'));
-                let kVal  = keys.find(k => k.toLowerCase().trim() === 'valor');
-                let kDesc = keys.find(k => k.toLowerCase().includes('descri'));
-                let kPgto = keys.find(k => k.toLowerCase().includes('pagamento'));
+                let colData = keys.find(k => k.toLowerCase().trim() === 'data');
+                let colTipo = keys.find(k => k.toLowerCase().trim() === 'tipo');
+                let colCat  = keys.find(k => k.toLowerCase().trim() === 'categoria');
+                let colSub  = keys.find(k => k.toLowerCase().includes('sub'));
+                let colOrig = keys.find(k => k.toLowerCase().includes('o que') || k.toLowerCase().includes('origem'));
+                let colValA = keys.find(k => k.toLowerCase().includes('ajustado'));
+                let colVal  = keys.find(k => k.toLowerCase().trim() === 'valor');
+                let colDesc = keys.find(k => k.toLowerCase().includes('descri'));
+                let colPgto = keys.find(k => k.toLowerCase().includes('pagamento'));
 
-                if(!kData || !kTipo) return;
+                if(!colData || !colTipo) return;
 
-                let tipo = (r[kTipo] || "").toLowerCase().trim();
-                let origemRaw = (r[kOrig] || "").toLowerCase().trim();
-                let cat = r[kCat] || "Outros";
-                let desc = r[kDesc] || "-";
-                let pgto = r[kPgto] || "Não Inf.";
+                let tipo = (r[colTipo] || "").toLowerCase().trim();
+                let origemRaw = (r[colOrig] || "").toLowerCase().trim();
+                let cat = r[colCat] || "Outros";
+                let desc = r[colDesc] || "-";
+                let pgto = r[colPgto] || "Não Inf.";
 
-                let valRaw = (kValA && r[kValA]) ? r[kValA] : r[kVal];
+                let valRaw = (colValA && r[colValA]) ? r[colValA] : r[colVal];
                 let valAbs = Math.abs(cleanVal(valRaw));
 
                 if(valAbs === 0) return;
 
-                // Lógica de Negócio (Corrigida)
-                let isRealizado = origemRaw.includes('realiz');
-                let isOrcamento = !isRealizado; // Se não é realizado, é orçado
+                // === LÓGICA DE STATUS O/R ===
+                let isRealizado = origemRaw.includes('realiz'); 
+                let isOrcamento = !isRealizado; // Lógica binária a pedido do usuário
 
                 if(isOrcamento) {
                     if(tipo === 'despesa') {
@@ -321,47 +304,38 @@
                         kpis.desp += valAbs;
                         if(!catStats[cat]) catStats[cat] = {real:0, orc:0};
                         catStats[cat].real += valAbs;
-                        
                         if(!pgtoStats[pgto]) pgtoStats[pgto] = 0;
                         pgtoStats[pgto] += valAbs;
                     }
                 }
 
-                // Tabela
-                let badge = "";
-                if(isOrcamento) badge = '<span class="diag-tag diag-orc">ORÇADO</span>';
-                else if(tipo==='receita') badge = '<span class="diag-tag diag-real-ok">RECEITA</span>';
-                else badge = '<span class="diag-tag diag-real-bad">REALIZADO</span>';
+                // Status Badge Simplificado: O ou R
+                let badge = isOrcamento 
+                    ? '<span class="status-badge status-o" title="Orçado">O</span>' 
+                    : '<span class="status-badge status-r" title="Realizado">R</span>';
 
                 rowsTable.push([
-                    r[kData],
-                    badge,
+                    r[colData],
+                    badge, // Coluna ST Otimizada
                     tipo.toUpperCase(),
                     cat,
-                    r[kSub]||"",
+                    r[colSub]||"",
                     desc,
                     valAbs.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})
                 ]);
             });
 
-            atualizarKPIs(kpis);
+            // Renderizar
+            document.getElementById('kpiReceita').innerText = kpis.rec.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+            document.getElementById('kpiDespesa').innerText = kpis.desp.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+            document.getElementById('kpiSaldo').innerText = (kpis.rec - kpis.desp).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+            document.getElementById('kpiOrcado').innerText = kpis.orc.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+
             renderizarGraficos(catStats, pgtoStats, kpis);
             renderizarTabela(rowsTable);
         }
 
-        function atualizarKPIs(k) {
-            document.getElementById('kpiReceita').innerText = k.rec.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
-            document.getElementById('kpiDespesa').innerText = k.desp.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
-            document.getElementById('kpiOrcado').innerText = k.orc.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
-            
-            let saldo = k.rec - k.desp;
-            let elSaldo = document.getElementById('kpiSaldo');
-            elSaldo.innerText = saldo.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
-            elSaldo.style.color = saldo >= 0 ? '#27ae60' : '#e74c3c';
-        }
-
         function renderizarGraficos(catStats, pgtoStats, kpis) {
-            // Categorias (Bar)
             let labelsCat = Object.keys(catStats);
             let dReal = labelsCat.map(c => catStats[c].real);
             let dOrc = labelsCat.map(c => catStats[c].orc);
@@ -382,7 +356,6 @@
                 }
             });
 
-            // Pagamentos (Doughnut)
             let labelsPgto = Object.keys(pgtoStats);
             let dPgto = Object.values(pgtoStats);
             if(STATE.charts.pgto) STATE.charts.pgto.destroy();
@@ -396,7 +369,6 @@
                 }
             });
 
-            // Fluxo (Barra Simples)
             if(STATE.charts.fluxo) STATE.charts.fluxo.destroy();
             STATE.charts.fluxo = new Chart(document.getElementById('chartFluxo'), {
                 type: 'bar',
@@ -407,7 +379,6 @@
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
             });
 
-            // Gauge (Consumo)
             let percent = kpis.orc > 0 ? (kpis.desp / kpis.orc) * 100 : 0;
             let restante = 100 - percent; if(restante < 0) restante = 0;
             if(STATE.charts.gauge) STATE.charts.gauge.destroy();
