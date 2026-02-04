@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Financeiro (V12.0 - Lógica Cartão de Crédito)</title>
+    <title>Dashboard Financeiro (V13.0 - Análise Anual)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
@@ -41,6 +41,10 @@
 
         .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-bottom: 20px; }
         .chart-box { background: white; padding: 20px; border-radius: 10px; height: 350px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); position: relative; }
+        
+        /* Box maior para o acumulado */
+        .chart-box-large { background: white; padding: 20px; border-radius: 10px; height: 450px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); position: relative; margin-bottom: 20px; }
+
         .chart-title { font-size: 14px; font-weight: 700; color: #34495e; margin-bottom: 10px; display: flex; justify-content: space-between; }
         .chart-hint { font-size: 11px; color: #bdc3c7; font-weight: normal; font-style: italic; }
 
@@ -59,7 +63,7 @@
 
     <div id="loading">
         <div class="spinner"></div>
-        <div style="font-weight:bold; color:var(--primary)">Atualizando Cálculos...</div>
+        <div style="font-weight:bold; color:var(--primary)">Gerando Análises...</div>
     </div>
 
     <div class="header">
@@ -101,11 +105,11 @@
 
     <div class="charts-grid">
         <div class="chart-box">
-            <div class="chart-title">Orçado vs Realizado (Clique para filtrar)</div>
+            <div class="chart-title">Orçado vs Realizado (Mês) <span class="chart-hint">Clique para filtrar</span></div>
             <canvas id="chartCategorias"></canvas>
         </div>
         <div class="chart-box">
-            <div class="chart-title">Formas de Pagamento (Realizado)</div>
+            <div class="chart-title">Formas de Pagamento <span class="chart-hint">Clique para filtrar</span></div>
             <canvas id="chartPagamentos"></canvas>
         </div>
     </div>
@@ -119,6 +123,11 @@
             <div class="chart-title">Consumo do Orçamento</div>
             <canvas id="chartGauge"></canvas>
         </div>
+    </div>
+
+    <div class="chart-box-large">
+        <div class="chart-title">🏆 Ranking de Gastos Acumulado no Ano <span class="chart-hint" id="anoAcumuladoHint">(Ano Atual)</span></div>
+        <canvas id="chartAcumulado"></canvas>
     </div>
 
     <div class="table-box">
@@ -220,6 +229,7 @@
             });
 
             processarDashboard();
+            gerarAnaliseAnual(val); // Nova função chamada aqui
         }
 
         function toggleFiltro(tipo, valor) {
@@ -255,7 +265,6 @@
                 return matchCat && matchPgto;
             });
 
-            // Agregadores
             let kpis = { rec: 0, despTotal: 0, despCaixa: 0, orc: 0 };
             let catStats = {};
             let pgtoStats = {};
@@ -286,11 +295,8 @@
 
                 if(valAbs === 0) return;
 
-                // Lógica de Status
                 let isRealizado = origemRaw.includes('realiz'); 
                 let isOrcamento = !isRealizado; 
-
-                // Lógica de Cartão de Crédito (Não desconta do saldo imediato)
                 let isCredito = pgto.toLowerCase().includes('crédito') || pgto.toLowerCase().includes('credito') || pgto.toLowerCase().includes('master') || pgto.toLowerCase().includes('visa');
 
                 if(isOrcamento) {
@@ -300,18 +306,11 @@
                         catStats[cat].orc += valAbs;
                     }
                 } else {
-                    // É Realizado
                     if(tipo === 'receita') {
                         kpis.rec += valAbs;
-                    } 
-                    else if(tipo === 'despesa') {
-                        kpis.despTotal += valAbs; // Soma para saber o gasto total
-                        
-                        // Só desconta do SALDO se NÃO for crédito
-                        if(!isCredito) {
-                            kpis.despCaixa += valAbs;
-                        }
-
+                    } else if(tipo === 'despesa') {
+                        kpis.despTotal += valAbs; 
+                        if(!isCredito) kpis.despCaixa += valAbs;
                         if(!catStats[cat]) catStats[cat] = {real:0, orc:0};
                         catStats[cat].real += valAbs;
                         if(!pgtoStats[pgto]) pgtoStats[pgto] = 0;
@@ -335,19 +334,87 @@
                 ]);
             });
 
-            // Atualiza KPIs com a Lógica de Crédito
-            let saldo = kpis.rec - kpis.despCaixa; // Saldo desconta apenas o que saiu do caixa
+            let saldo = kpis.rec - kpis.despCaixa; 
 
             document.getElementById('kpiReceita').innerText = kpis.rec.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
             document.getElementById('kpiDespesa').innerText = kpis.despTotal.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
             document.getElementById('kpiSaldo').innerText = saldo.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
             document.getElementById('kpiOrcado').innerText = kpis.orc.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
-            
-            // Cor do Saldo
             document.getElementById('kpiSaldo').style.color = saldo >= 0 ? '#27ae60' : '#e74c3c';
 
             renderizarGraficos(catStats, pgtoStats, kpis);
             renderizarTabela(rowsTable);
+        }
+
+        // --- NOVA FUNÇÃO: ANÁLISE ANUAL ---
+        function gerarAnaliseAnual(mesSelecionado) {
+            // 1. Determina o Ano
+            let anoAlvo = new Date().getFullYear().toString();
+            if(mesSelecionado !== "todos" && mesSelecionado.length >= 4) {
+                anoAlvo = mesSelecionado.substring(0, 4);
+            }
+            document.getElementById('anoAcumuladoHint').innerText = `(Dados de ${anoAlvo})`;
+
+            // 2. Filtra Dados do Ano Inteiro (Realizados e Despesa)
+            let catAnual = {};
+            STATE.dadosBrutos.forEach(r => {
+                let keys = Object.keys(r);
+                let colData = keys.find(k => k.toLowerCase().trim() === 'data');
+                let colTipo = keys.find(k => k.toLowerCase().trim() === 'tipo');
+                let colCat  = keys.find(k => k.toLowerCase().trim() === 'categoria');
+                let colOrig = keys.find(k => k.toLowerCase().includes('o que') || k.toLowerCase().includes('origem'));
+                let colValA = keys.find(k => k.toLowerCase().includes('ajustado'));
+                let colVal  = keys.find(k => k.toLowerCase().trim() === 'valor');
+
+                if(!colData || !r[colData]) return;
+                
+                // Checa Ano
+                let anoLinha = "";
+                if(r[colData].includes('/')) anoLinha = r[colData].split('/')[2];
+                else { let d = new Date(r[colData]); if(!isNaN(d)) anoLinha = d.getFullYear().toString(); }
+                
+                if(anoLinha !== anoAlvo) return;
+
+                // Checa se é Realizado e Despesa
+                let origemRaw = (r[colOrig] || "").toLowerCase();
+                let tipo = (r[colTipo] || "").toLowerCase().trim();
+                let isRealizado = origemRaw.includes('realiz');
+
+                if(isRealizado && tipo === 'despesa') {
+                    let cat = r[colCat] || "Outros";
+                    let valRaw = (colValA && r[colValA]) ? r[colValA] : r[colVal];
+                    let valAbs = Math.abs(cleanVal(valRaw));
+                    
+                    if(!catAnual[cat]) catAnual[cat] = 0;
+                    catAnual[cat] += valAbs;
+                }
+            });
+
+            // 3. Ordena para o Ranking
+            let sortedCats = Object.entries(catAnual).sort((a,b) => b[1] - a[1]);
+            let labels = sortedCats.map(x => x[0]);
+            let data = sortedCats.map(x => x[1]);
+
+            // 4. Renderiza Gráfico Horizontal
+            if(STATE.charts.acumulado) STATE.charts.acumulado.destroy();
+            STATE.charts.acumulado = new Chart(document.getElementById('chartAcumulado'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Gasto Total no Ano',
+                        data: data,
+                        backgroundColor: '#e74c3c',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    indexAxis: 'y', // Barra Horizontal
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } }
+                }
+            });
         }
 
         function renderizarGraficos(catStats, pgtoStats, kpis) {
@@ -384,7 +451,6 @@
                 }
             });
 
-            // Fluxo: Mostra Entrada vs Saída de CAIXA (efetivo)
             if(STATE.charts.fluxo) STATE.charts.fluxo.destroy();
             STATE.charts.fluxo = new Chart(document.getElementById('chartFluxo'), {
                 type: 'bar',
