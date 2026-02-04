@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Financeiro (V13.0 - Análise Anual)</title>
+    <title>Dashboard Financeiro (V14.0 - Acumulado YTD)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
@@ -63,7 +63,7 @@
 
     <div id="loading">
         <div class="spinner"></div>
-        <div style="font-weight:bold; color:var(--primary)">Gerando Análises...</div>
+        <div style="font-weight:bold; color:var(--primary)">Calculando YTD...</div>
     </div>
 
     <div class="header">
@@ -84,28 +84,28 @@
         <div class="kpi-card border-blue">
             <h3>Entradas (Receitas)</h3>
             <p id="kpiReceita">R$ 0,00</p>
-            <div class="kpi-info">Dinheiro que entrou</div>
+            <div class="kpi-info">Mês Selecionado</div>
         </div>
         <div class="kpi-card border-red">
             <h3>Despesas Totais</h3>
             <p id="kpiDespesa">R$ 0,00</p>
-            <div class="kpi-info">Inclui Cartão de Crédito</div>
+            <div class="kpi-info">Mês Selecionado</div>
         </div>
         <div class="kpi-card border-green">
             <h3>Saldo Disponível</h3>
             <p id="kpiSaldo">R$ 0,00</p>
-            <div class="kpi-info">Receita - (Saídas de Caixa)</div>
+            <div class="kpi-info">Caixa (Sem Crédito)</div>
         </div>
         <div class="kpi-card border-gold">
             <h3>Orçamento (O)</h3>
             <p id="kpiOrcado">R$ 0,00</p>
-            <div class="kpi-info">Planejado para o mês</div>
+            <div class="kpi-info">Planejado do Mês</div>
         </div>
     </div>
 
     <div class="charts-grid">
         <div class="chart-box">
-            <div class="chart-title">Orçado vs Realizado (Mês) <span class="chart-hint">Clique para filtrar</span></div>
+            <div class="chart-title">Orçado vs Realizado (No Mês) <span class="chart-hint">Clique para filtrar</span></div>
             <canvas id="chartCategorias"></canvas>
         </div>
         <div class="chart-box">
@@ -126,7 +126,7 @@
     </div>
 
     <div class="chart-box-large">
-        <div class="chart-title">🏆 Ranking de Gastos Acumulado no Ano <span class="chart-hint" id="anoAcumuladoHint">(Ano Atual)</span></div>
+        <div class="chart-title">🏆 Ranking Acumulado no Ano <span class="chart-hint" id="anoAcumuladoHint">(YTD)</span></div>
         <canvas id="chartAcumulado"></canvas>
     </div>
 
@@ -229,7 +229,7 @@
             });
 
             processarDashboard();
-            gerarAnaliseAnual(val); // Nova função chamada aqui
+            gerarAnaliseAnualYTD(val); // Nova função YTD
         }
 
         function toggleFiltro(tipo, valor) {
@@ -289,7 +289,6 @@
                 let cat = r[colCat] || "Outros";
                 let desc = r[colDesc] || "-";
                 let pgto = (r[colPgto] || "Não Inf.").trim();
-
                 let valRaw = (colValA && r[colValA]) ? r[colValA] : r[colVal];
                 let valAbs = Math.abs(cleanVal(valRaw));
 
@@ -346,17 +345,30 @@
             renderizarTabela(rowsTable);
         }
 
-        // --- NOVA FUNÇÃO: ANÁLISE ANUAL ---
-        function gerarAnaliseAnual(mesSelecionado) {
-            // 1. Determina o Ano
-            let anoAlvo = new Date().getFullYear().toString();
-            if(mesSelecionado !== "todos" && mesSelecionado.length >= 4) {
-                anoAlvo = mesSelecionado.substring(0, 4);
+        // --- FUNÇÃO ACUMULADA YTD (ATÉ O MÊS SELECIONADO) ---
+        function gerarAnaliseAnualYTD(mesSelecionado) {
+            // Definição dos Limites (Ano e Mês Máximo)
+            let anoLimite = 0;
+            let mesLimite = 0; // 1 a 12
+            
+            if(mesSelecionado === "todos") {
+                // Se todos, vamos pegar o ano atual do sistema como base para "Ranking Anual"
+                // ou mostrar tudo. Aqui vou configurar para mostrar acumulado do ano atual.
+                let hoje = new Date();
+                anoLimite = hoje.getFullYear();
+                mesLimite = 12; // Até o fim do ano
+                document.getElementById('anoAcumuladoHint').innerText = `(Tudo de ${anoLimite})`;
+            } else {
+                let parts = mesSelecionado.split('-'); // YYYY-MM
+                anoLimite = parseInt(parts[0]);
+                mesLimite = parseInt(parts[1]);
+                
+                let nomes = ["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+                document.getElementById('anoAcumuladoHint').innerText = `(Jan a ${nomes[mesLimite]} de ${anoLimite})`;
             }
-            document.getElementById('anoAcumuladoHint').innerText = `(Dados de ${anoAlvo})`;
 
-            // 2. Filtra Dados do Ano Inteiro (Realizados e Despesa)
-            let catAnual = {};
+            // Filtragem e Soma
+            let catAcumulado = {};
             STATE.dadosBrutos.forEach(r => {
                 let keys = Object.keys(r);
                 let colData = keys.find(k => k.toLowerCase().trim() === 'data');
@@ -368,48 +380,55 @@
 
                 if(!colData || !r[colData]) return;
                 
-                // Checa Ano
-                let anoLinha = "";
-                if(r[colData].includes('/')) anoLinha = r[colData].split('/')[2];
-                else { let d = new Date(r[colData]); if(!isNaN(d)) anoLinha = d.getFullYear().toString(); }
+                // Parse da Data da Linha
+                let rAno = 0;
+                let rMes = 0;
+                if(r[colData].includes('/')) {
+                    let p = r[colData].split('/');
+                    rAno = parseInt(p[2]);
+                    rMes = parseInt(p[1]);
+                } else { 
+                    let d = new Date(r[colData]); 
+                    if(!isNaN(d)) { rAno = d.getFullYear(); rMes = d.getMonth()+1; }
+                }
                 
-                if(anoLinha !== anoAlvo) return;
+                // LÓGICA YTD: Mesmo Ano E Mês <= Mês Selecionado
+                if(rAno === anoLimite && rMes <= mesLimite) {
+                    let origemRaw = (r[colOrig] || "").toLowerCase();
+                    let tipo = (r[colTipo] || "").toLowerCase().trim();
+                    let isRealizado = origemRaw.includes('realiz');
 
-                // Checa se é Realizado e Despesa
-                let origemRaw = (r[colOrig] || "").toLowerCase();
-                let tipo = (r[colTipo] || "").toLowerCase().trim();
-                let isRealizado = origemRaw.includes('realiz');
-
-                if(isRealizado && tipo === 'despesa') {
-                    let cat = r[colCat] || "Outros";
-                    let valRaw = (colValA && r[colValA]) ? r[colValA] : r[colVal];
-                    let valAbs = Math.abs(cleanVal(valRaw));
-                    
-                    if(!catAnual[cat]) catAnual[cat] = 0;
-                    catAnual[cat] += valAbs;
+                    if(isRealizado && tipo === 'despesa') {
+                        let cat = r[colCat] || "Outros";
+                        let valRaw = (colValA && r[colValA]) ? r[colValA] : r[colVal];
+                        let valAbs = Math.abs(cleanVal(valRaw));
+                        
+                        if(!catAcumulado[cat]) catAcumulado[cat] = 0;
+                        catAcumulado[cat] += valAbs;
+                    }
                 }
             });
 
-            // 3. Ordena para o Ranking
-            let sortedCats = Object.entries(catAnual).sort((a,b) => b[1] - a[1]);
+            // Ordenação
+            let sortedCats = Object.entries(catAcumulado).sort((a,b) => b[1] - a[1]);
             let labels = sortedCats.map(x => x[0]);
             let data = sortedCats.map(x => x[1]);
 
-            // 4. Renderiza Gráfico Horizontal
+            // Renderização
             if(STATE.charts.acumulado) STATE.charts.acumulado.destroy();
             STATE.charts.acumulado = new Chart(document.getElementById('chartAcumulado'), {
                 type: 'bar',
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: 'Gasto Total no Ano',
+                        label: 'Gasto Acumulado (YTD)',
                         data: data,
                         backgroundColor: '#e74c3c',
                         borderRadius: 4
                     }]
                 },
                 options: {
-                    indexAxis: 'y', // Barra Horizontal
+                    indexAxis: 'y', 
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: { legend: { display: false } }
