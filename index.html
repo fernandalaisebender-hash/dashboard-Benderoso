@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Financeiro (V14.0 - Acumulado YTD)</title>
+    <title>Dashboard Financeiro (V15.0 - Ordenado)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
@@ -39,11 +39,14 @@
         .kpi-card p { margin: 0; font-size: 24px; font-weight: 800; color: var(--primary); }
         .kpi-info { font-size: 10px; color: #bdc3c7; margin-top: 5px; }
 
+        /* Grids */
         .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-bottom: 20px; }
         .chart-box { background: white; padding: 20px; border-radius: 10px; height: 350px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); position: relative; }
-        
-        /* Box maior para o acumulado */
         .chart-box-large { background: white; padding: 20px; border-radius: 10px; height: 450px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); position: relative; margin-bottom: 20px; }
+
+        /* Layout Específico para Fluxo (Full Width) */
+        .chart-full-row { display: grid; grid-template-columns: 1fr; gap: 20px; margin-bottom: 20px; }
+        .chart-box-wide { background: white; padding: 20px; border-radius: 10px; height: 300px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); position: relative; }
 
         .chart-title { font-size: 14px; font-weight: 700; color: #34495e; margin-bottom: 10px; display: flex; justify-content: space-between; }
         .chart-hint { font-size: 11px; color: #bdc3c7; font-weight: normal; font-style: italic; }
@@ -63,7 +66,7 @@
 
     <div id="loading">
         <div class="spinner"></div>
-        <div style="font-weight:bold; color:var(--primary)">Calculando YTD...</div>
+        <div style="font-weight:bold; color:var(--primary)">Atualizando Dashboard...</div>
     </div>
 
     <div class="header">
@@ -89,7 +92,7 @@
         <div class="kpi-card border-red">
             <h3>Despesas Totais</h3>
             <p id="kpiDespesa">R$ 0,00</p>
-            <div class="kpi-info">Mês Selecionado</div>
+            <div class="kpi-info">Inclui Cartão de Crédito</div>
         </div>
         <div class="kpi-card border-green">
             <h3>Saldo Disponível</h3>
@@ -105,23 +108,19 @@
 
     <div class="charts-grid">
         <div class="chart-box">
-            <div class="chart-title">Orçado vs Realizado (No Mês) <span class="chart-hint">Clique para filtrar</span></div>
+            <div class="chart-title">Orçado vs Realizado (Ordenado por Maior Gasto)</div>
             <canvas id="chartCategorias"></canvas>
         </div>
         <div class="chart-box">
-            <div class="chart-title">Formas de Pagamento <span class="chart-hint">Clique para filtrar</span></div>
+            <div class="chart-title">Formas de Pagamento</div>
             <canvas id="chartPagamentos"></canvas>
         </div>
     </div>
 
-    <div class="charts-grid" style="grid-template-columns: 1fr 1fr;">
-        <div class="chart-box" style="height: 300px;">
-            <div class="chart-title">Fluxo de Caixa (Efetivo)</div>
+    <div class="chart-full-row">
+        <div class="chart-box-wide">
+            <div class="chart-title">Fluxo de Caixa (Entradas vs Saídas Efetivas)</div>
             <canvas id="chartFluxo"></canvas>
-        </div>
-        <div class="chart-box" style="height: 300px;">
-            <div class="chart-title">Consumo do Orçamento</div>
-            <canvas id="chartGauge"></canvas>
         </div>
     </div>
 
@@ -229,7 +228,7 @@
             });
 
             processarDashboard();
-            gerarAnaliseAnualYTD(val); // Nova função YTD
+            gerarAnaliseAnualYTD(val);
         }
 
         function toggleFiltro(tipo, valor) {
@@ -345,29 +344,23 @@
             renderizarTabela(rowsTable);
         }
 
-        // --- FUNÇÃO ACUMULADA YTD (ATÉ O MÊS SELECIONADO) ---
         function gerarAnaliseAnualYTD(mesSelecionado) {
-            // Definição dos Limites (Ano e Mês Máximo)
             let anoLimite = 0;
-            let mesLimite = 0; // 1 a 12
+            let mesLimite = 0;
             
             if(mesSelecionado === "todos") {
-                // Se todos, vamos pegar o ano atual do sistema como base para "Ranking Anual"
-                // ou mostrar tudo. Aqui vou configurar para mostrar acumulado do ano atual.
                 let hoje = new Date();
                 anoLimite = hoje.getFullYear();
-                mesLimite = 12; // Até o fim do ano
+                mesLimite = 12;
                 document.getElementById('anoAcumuladoHint').innerText = `(Tudo de ${anoLimite})`;
             } else {
-                let parts = mesSelecionado.split('-'); // YYYY-MM
+                let parts = mesSelecionado.split('-');
                 anoLimite = parseInt(parts[0]);
                 mesLimite = parseInt(parts[1]);
-                
                 let nomes = ["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
                 document.getElementById('anoAcumuladoHint').innerText = `(Jan a ${nomes[mesLimite]} de ${anoLimite})`;
             }
 
-            // Filtragem e Soma
             let catAcumulado = {};
             STATE.dadosBrutos.forEach(r => {
                 let keys = Object.keys(r);
@@ -380,19 +373,15 @@
 
                 if(!colData || !r[colData]) return;
                 
-                // Parse da Data da Linha
-                let rAno = 0;
-                let rMes = 0;
+                let rAno = 0, rMes = 0;
                 if(r[colData].includes('/')) {
                     let p = r[colData].split('/');
-                    rAno = parseInt(p[2]);
-                    rMes = parseInt(p[1]);
+                    rAno = parseInt(p[2]); rMes = parseInt(p[1]);
                 } else { 
                     let d = new Date(r[colData]); 
                     if(!isNaN(d)) { rAno = d.getFullYear(); rMes = d.getMonth()+1; }
                 }
                 
-                // LÓGICA YTD: Mesmo Ano E Mês <= Mês Selecionado
                 if(rAno === anoLimite && rMes <= mesLimite) {
                     let origemRaw = (r[colOrig] || "").toLowerCase();
                     let tipo = (r[colTipo] || "").toLowerCase().trim();
@@ -409,12 +398,11 @@
                 }
             });
 
-            // Ordenação
+            // Ordenação (YTD)
             let sortedCats = Object.entries(catAcumulado).sort((a,b) => b[1] - a[1]);
             let labels = sortedCats.map(x => x[0]);
             let data = sortedCats.map(x => x[1]);
 
-            // Renderização
             if(STATE.charts.acumulado) STATE.charts.acumulado.destroy();
             STATE.charts.acumulado = new Chart(document.getElementById('chartAcumulado'), {
                 type: 'bar',
@@ -437,18 +425,24 @@
         }
 
         function renderizarGraficos(catStats, pgtoStats, kpis) {
-            let labelsCat = Object.keys(catStats);
-            let dReal = labelsCat.map(c => catStats[c].real);
-            let dOrc = labelsCat.map(c => catStats[c].orc);
+            // ORDENAÇÃO: Maior Gasto Realizado Primeiro
+            let sortedEntries = Object.entries(catStats)
+                .map(([key, val]) => ({ key, ...val }))
+                .sort((a, b) => b.real - a.real); // Ordena por gasto realizado (Desc)
 
+            let labelsCat = sortedEntries.map(e => e.key);
+            let dReal = sortedEntries.map(e => e.real);
+            let dOrc = sortedEntries.map(e => e.orc);
+
+            // Gráfico 1: Categorias (Ordenado)
             if(STATE.charts.cat) STATE.charts.cat.destroy();
             STATE.charts.cat = new Chart(document.getElementById('chartCategorias'), {
                 type: 'bar',
                 data: {
                     labels: labelsCat,
                     datasets: [
-                        { label: 'Orçado', data: dOrc, backgroundColor: '#f1c40f', opacity: 0.7 },
-                        { label: 'Realizado', data: dReal, backgroundColor: '#e74c3c' }
+                        { label: 'Realizado (Gasto)', data: dReal, backgroundColor: '#e74c3c' },
+                        { label: 'Planejado', data: dOrc, backgroundColor: '#f1c40f', opacity: 0.7 }
                     ]
                 },
                 options: {
@@ -457,6 +451,7 @@
                 }
             });
 
+            // Gráfico 2: Pagamentos
             let labelsPgto = Object.keys(pgtoStats);
             let dPgto = Object.values(pgtoStats);
             if(STATE.charts.pgto) STATE.charts.pgto.destroy();
@@ -470,6 +465,7 @@
                 }
             });
 
+            // Gráfico 3: Fluxo de Caixa (Full Width)
             if(STATE.charts.fluxo) STATE.charts.fluxo.destroy();
             STATE.charts.fluxo = new Chart(document.getElementById('chartFluxo'), {
                 type: 'bar',
@@ -477,19 +473,11 @@
                     labels: ['Entradas', 'Saídas (Caixa)'],
                     datasets: [{ label: 'Total', data: [kpis.rec, kpis.despCaixa], backgroundColor: ['#27ae60', '#e74c3c'], borderRadius: 5 }]
                 },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-            });
-
-            let percent = kpis.orc > 0 ? (kpis.despTotal / kpis.orc) * 100 : 0;
-            let restante = 100 - percent; if(restante < 0) restante = 0;
-            if(STATE.charts.gauge) STATE.charts.gauge.destroy();
-            STATE.charts.gauge = new Chart(document.getElementById('chartGauge'), {
-                type: 'doughnut',
-                data: {
-                    labels: ['Consumido', 'Disponível'],
-                    datasets: [{ data: [percent, restante], backgroundColor: [percent > 100 ? '#e74c3c' : '#3498db', '#ecf0f1'], circumference: 180, rotation: 270 }]
-                },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: percent.toFixed(1) + '% Consumido', position: 'bottom' } } }
+                options: { 
+                    indexAxis: 'y', // Barra Horizontal para diferenciar
+                    responsive: true, maintainAspectRatio: false, 
+                    plugins: { legend: { display: false } } 
+                }
             });
         }
 
