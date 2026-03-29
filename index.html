@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Financeiro (V15.0 - Ordenado)</title>
+    <title>Dashboard Financeiro (V15.0 - Ordenado e Saldo Contínuo)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
@@ -34,6 +34,7 @@
         .border-red::after { background: #e74c3c; }
         .border-green::after { background: #27ae60; }
         .border-gold::after { background: #f1c40f; }
+        .border-dark::after { background: #2c3e50; }
         
         .kpi-card h3 { margin: 0 0 5px; font-size: 11px; color: #95a5a6; text-transform: uppercase; letter-spacing: 1px; }
         .kpi-card p { margin: 0; font-size: 24px; font-weight: 800; color: var(--primary); }
@@ -84,6 +85,19 @@
     </div>
 
     <div class="kpi-row">
+        <div class="kpi-card border-dark" style="background-color: #f8f9fa;">
+            <h3>Saldo Mês Anterior</h3>
+            <p id="kpiSaldoAnterior">R$ 0,00</p>
+            <div class="kpi-info">Acumulado até o mês passado</div>
+        </div>
+        <div class="kpi-card border-green" style="background-color: #eafaf1;">
+            <h3>Saldo Atual (Caixa)</h3>
+            <p id="kpiSaldoAtual">R$ 0,00</p>
+            <div class="kpi-info">Saldo Anterior + Movimentação do Mês</div>
+        </div>
+    </div>
+
+    <div class="kpi-row">
         <div class="kpi-card border-blue">
             <h3>Entradas (Receitas)</h3>
             <p id="kpiReceita">R$ 0,00</p>
@@ -95,9 +109,9 @@
             <div class="kpi-info">Inclui Cartão de Crédito</div>
         </div>
         <div class="kpi-card border-green">
-            <h3>Saldo Disponível</h3>
-            <p id="kpiSaldo">R$ 0,00</p>
-            <div class="kpi-info">Caixa (Sem Crédito)</div>
+            <h3>Sobrou no Mês</h3>
+            <p id="kpiSaldoMes">R$ 0,00</p>
+            <div class="kpi-info">Receitas - Despesas Caixa (Mês)</div>
         </div>
         <div class="kpi-card border-gold">
             <h3>Orçamento (O)</h3>
@@ -173,6 +187,7 @@
             return parseFloat(s) || 0;
         }
 
+        // Retorna a data no formato YYYY-MM para facilitar ordenação e comparação
         function getMesAno(dataStr) {
             if(!dataStr) return "";
             if(dataStr.includes('/')) {
@@ -255,6 +270,61 @@
         }
 
         function processarDashboard() {
+            let selectedMes = document.getElementById("selMes").value; // Ex: "2026-03" ou "todos"
+            
+            let saldoAnterior = 0;
+            let saldoAtual = 0;
+
+            // 1. CÁLCULO DE HISTÓRICO (Lendo todos os dados para achar o saldo contínuo)
+            STATE.dadosBrutos.forEach(r => {
+                let keys = Object.keys(r);
+                let colData = keys.find(k => k.toLowerCase().trim() === 'data');
+                let colTipo = keys.find(k => k.toLowerCase().trim() === 'tipo');
+                let colOrig = keys.find(k => k.toLowerCase().includes('o que') || k.toLowerCase().includes('origem'));
+                let colPgto = keys.find(k => k.toLowerCase().includes('pagamento'));
+                let colValA = keys.find(k => k.toLowerCase().includes('ajustado'));
+                let colVal  = keys.find(k => k.toLowerCase().trim() === 'valor');
+
+                if(!colData || !colTipo) return;
+
+                let rMesAno = getMesAno(r[colData]);
+                if(!rMesAno) return;
+
+                let tipo = (r[colTipo] || "").toLowerCase().trim();
+                let origemRaw = (r[colOrig] || "").toLowerCase().trim();
+                let pgto = (r[colPgto] || "").toLowerCase().trim();
+                let valRaw = (colValA && r[colValA]) ? r[colValA] : r[colVal];
+                let valAbs = Math.abs(cleanVal(valRaw));
+
+                if(valAbs === 0) return;
+
+                let isRealizado = origemRaw.includes('realiz');
+                if(!isRealizado) return; // Orçamento não afeta saldo de caixa
+
+                let isCredito = pgto.includes('crédito') || pgto.includes('credito') || pgto.includes('master') || pgto.includes('visa');
+
+                let impactoCaixa = 0;
+                if (tipo === 'receita' || tipo === 'entrada') {
+                    impactoCaixa = valAbs;
+                } else if (tipo === 'despesa' && !isCredito) {
+                    // Se for despesa e não for crédito, subtrai do caixa
+                    impactoCaixa = -valAbs;
+                }
+
+                // Distribuição no tempo
+                if (selectedMes === "todos") {
+                    saldoAtual += impactoCaixa;
+                } else {
+                    if (rMesAno < selectedMes) {
+                        saldoAnterior += impactoCaixa;
+                        saldoAtual += impactoCaixa;
+                    } else if (rMesAno === selectedMes) {
+                        saldoAtual += impactoCaixa;
+                    }
+                }
+            });
+
+            // 2. CÁLCULO DO MÊS SELECIONADO (Com filtros de Categoria e Pgto aplicados na interface)
             let dadosFiltrados = STATE.dadosMes.filter(r => {
                 let keys = Object.keys(r);
                 let colCat = keys.find(k => k.toLowerCase().trim() === 'categoria');
@@ -304,7 +374,7 @@
                         catStats[cat].orc += valAbs;
                     }
                 } else {
-                    if(tipo === 'receita') {
+                    if(tipo === 'receita' || tipo === 'entrada') {
                         kpis.rec += valAbs;
                     } else if(tipo === 'despesa') {
                         kpis.despTotal += valAbs; 
@@ -332,13 +402,21 @@
                 ]);
             });
 
-            let saldo = kpis.rec - kpis.despCaixa; 
+            let saldoMes = kpis.rec - kpis.despCaixa; 
 
+            // Atualiza Interface - Saldos Históricos
+            document.getElementById('kpiSaldoAnterior').innerText = saldoAnterior.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+            document.getElementById('kpiSaldoAnterior').style.color = saldoAnterior >= 0 ? '#27ae60' : '#e74c3c';
+            
+            document.getElementById('kpiSaldoAtual').innerText = saldoAtual.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+            document.getElementById('kpiSaldoAtual').style.color = saldoAtual >= 0 ? '#27ae60' : '#e74c3c';
+
+            // Atualiza Interface - Fluxo do Mês
             document.getElementById('kpiReceita').innerText = kpis.rec.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
             document.getElementById('kpiDespesa').innerText = kpis.despTotal.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
-            document.getElementById('kpiSaldo').innerText = saldo.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+            document.getElementById('kpiSaldoMes').innerText = saldoMes.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
             document.getElementById('kpiOrcado').innerText = kpis.orc.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
-            document.getElementById('kpiSaldo').style.color = saldo >= 0 ? '#27ae60' : '#e74c3c';
+            document.getElementById('kpiSaldoMes').style.color = saldoMes >= 0 ? '#27ae60' : '#e74c3c';
 
             renderizarGraficos(catStats, pgtoStats, kpis);
             renderizarTabela(rowsTable);
@@ -398,7 +476,6 @@
                 }
             });
 
-            // Ordenação (YTD)
             let sortedCats = Object.entries(catAcumulado).sort((a,b) => b[1] - a[1]);
             let labels = sortedCats.map(x => x[0]);
             let data = sortedCats.map(x => x[1]);
@@ -425,16 +502,14 @@
         }
 
         function renderizarGraficos(catStats, pgtoStats, kpis) {
-            // ORDENAÇÃO: Maior Gasto Realizado Primeiro
             let sortedEntries = Object.entries(catStats)
                 .map(([key, val]) => ({ key, ...val }))
-                .sort((a, b) => b.real - a.real); // Ordena por gasto realizado (Desc)
+                .sort((a, b) => b.real - a.real); 
 
             let labelsCat = sortedEntries.map(e => e.key);
             let dReal = sortedEntries.map(e => e.real);
             let dOrc = sortedEntries.map(e => e.orc);
 
-            // Gráfico 1: Categorias (Ordenado)
             if(STATE.charts.cat) STATE.charts.cat.destroy();
             STATE.charts.cat = new Chart(document.getElementById('chartCategorias'), {
                 type: 'bar',
@@ -451,7 +526,6 @@
                 }
             });
 
-            // Gráfico 2: Pagamentos
             let labelsPgto = Object.keys(pgtoStats);
             let dPgto = Object.values(pgtoStats);
             if(STATE.charts.pgto) STATE.charts.pgto.destroy();
@@ -465,7 +539,6 @@
                 }
             });
 
-            // Gráfico 3: Fluxo de Caixa (Full Width)
             if(STATE.charts.fluxo) STATE.charts.fluxo.destroy();
             STATE.charts.fluxo = new Chart(document.getElementById('chartFluxo'), {
                 type: 'bar',
@@ -474,7 +547,7 @@
                     datasets: [{ label: 'Total', data: [kpis.rec, kpis.despCaixa], backgroundColor: ['#27ae60', '#e74c3c'], borderRadius: 5 }]
                 },
                 options: { 
-                    indexAxis: 'y', // Barra Horizontal para diferenciar
+                    indexAxis: 'y', 
                     responsive: true, maintainAspectRatio: false, 
                     plugins: { legend: { display: false } } 
                 }
